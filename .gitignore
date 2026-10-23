@@ -1,0 +1,40 @@
+# Секреты и локальная конфигурация
+.env
+.env.*
+!.env.example
+
+# Виртуальное окружение и кэш Python
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.mypy_cache/
+
+# IDE
+.idea/
+.vscode/
+
+# База данных и резервные копии
+acts.db
+*.db
+*.db-wal
+*.db-shm
+*.db.bak
+*.bak
+
+# Сгенерированные акты и архивы
+acts/
+acts.db
+*.docx.bak
+~$*.docx
+
+# Исходные PDF проекта (конфиденциальные)
+project/
+Примеры актов/
+
+# Служебные файлы ОС
+.DS_Store
+Thumbs.db
+desktop.ini
