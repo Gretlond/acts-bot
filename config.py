@@ -51,8 +51,12 @@ def _ids_from_env(name: str) -> set[int]:
 ADMIN_IDS = _ids_from_env("ADMIN_IDS")
 ALLOWED_USER_IDS = _ids_from_env("ALLOWED_USER_IDS") | ADMIN_IDS
 
-# Если список не заполнен — бот открыт для всех (с предупреждением при старте).
-ACCESS_OPEN = not ALLOWED_USER_IDS
+# По умолчанию без белого списка доступ закрыт. Для временного открытого
+# режима (только первый запуск) можно явно указать ALLOW_ANY_USER=1.
+ALLOW_ANY_USER = (os.getenv("ALLOW_ANY_USER") or "").strip().lower() in {
+    "1", "true", "yes", "on",
+}
+ACCESS_OPEN = ALLOW_ANY_USER and not ALLOWED_USER_IDS
 
 
 def is_user_allowed(user_id: int | None) -> bool:

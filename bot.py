@@ -7,7 +7,8 @@ from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import CallbackQuery, Message
 
 from config import (
-    ACCESS_OPEN, ALLOWED_USER_IDS, BOT_TOKEN, ensure_dirs, is_user_allowed,
+    ACCESS_OPEN, ALLOWED_USER_IDS, ALLOW_ANY_USER, BOT_TOKEN,
+    ensure_dirs, is_user_allowed,
 )
 from db import init_db
 from handlers import router
@@ -103,9 +104,13 @@ async def main():
 
     if ACCESS_OPEN:
         logger.warning(
-            "⚠️ ALLOWED_USER_IDS/ADMIN_IDS не заполнены — "
-            "бот открыт для всех. Узнайте свой ID командой /myid "
-            "и добавьте его в .env."
+            "⚠️ ALLOW_ANY_USER=1 — бот открыт для всех. "
+            "Для продакшена заполните ADMIN_IDS/ALLOWED_USER_IDS в .env."
+        )
+    elif not ALLOWED_USER_IDS:
+        logger.warning(
+            "⚠️ ADMIN_IDS/ALLOWED_USER_IDS не заполнены — доступ закрыт. "
+            "Запустите бота, отправьте /myid и добавьте ID в .env."
         )
     else:
         logger.info("Доступ разрешён пользователям: %s", sorted(ALLOWED_USER_IDS))
