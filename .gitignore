@@ -33,6 +33,7 @@ acts.db
 # Локальные логи и PID запущенного бота
 logs/
 .bot.pid
+.watchdog.pid
 
 # Исходные PDF проекта (конфиденциальные)
 project/
