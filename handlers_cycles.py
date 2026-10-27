@@ -2,6 +2,7 @@
 """
 Всё, что связано с циклами работ: конструктор, просмотр, запуск.
 """
+
 import os
 import traceback
 
@@ -9,48 +10,78 @@ from aiogram import Router, F
 from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery, FSInputFile
 
-from config import ACTS_DIR, to_stored_path
+from config import ACTS_DIR
 from db import (
-    get_all_objects, get_object,
-    get_positions_for_object, get_position,
+    get_all_objects,
+    get_object,
+    get_positions_for_object,
+    get_position,
     get_all_work_types,
     get_materials_for_object,
     get_sections_for_position,
     get_next_act_number,
     get_cycles_for_user,
-    get_cycle, get_cycle_items, get_cycle_item,
-    add_cycle, update_cycle, add_cycle_item, update_cycle_item,
-    delete_cycle, delete_cycle_item, move_cycle_item,
-    copy_cycle_for_user, render_cycle_name,
+    get_cycle,
+    get_cycle_items,
+    get_cycle_item,
+    add_cycle,
+    update_cycle,
+    add_cycle_item,
+    update_cycle_item,
+    delete_cycle,
+    delete_cycle_item,
+    move_cycle_item,
+    copy_cycle_for_user,
+    render_cycle_name,
     find_materials_by_hint,
-    save_act,
     is_author_supervision,
+    find_duplicate_act,
+    DuplicateActNumberError,
 )
 from docs import get_pdf_path, check_size, make_input_file
-from generate_act import build_act
+from act_service import (
+    create_act_with_file,
+    validate_act_payload,
+    validation_text,
+)
 from states import CycleRun
 from keyboards import (
-    main_menu_kb, objects_kb, work_types_kb,
-    position_group_action_kb, positions_in_group_kb,
-    back_kb, cancel_kb,
-    cycles_kb, cycle_view_kb,
-    cycle_edit_menu_kb, cycle_manage_items_kb, cycle_item_manage_kb,
-    step_template_kb, cycle_confirm_delete_kb,
-    cycle_section_kb, cycle_dates_kb, cycle_pdf_choice_kb,
-    cycle_sheets_kb, cycle_sheets_apply_kb,
+    main_menu_kb,
+    objects_kb,
+    work_types_kb,
+    position_group_action_kb,
+    positions_in_group_kb,
+    positions_grouped_kb,
+    back_kb,
+    cancel_kb,
+    cycles_kb,
+    cycle_view_kb,
+    cycle_edit_menu_kb,
+    cycle_manage_items_kb,
+    cycle_item_manage_kb,
+    step_template_kb,
+    cycle_confirm_delete_kb,
+    cycle_section_kb,
+    cycle_dates_kb,
+    cycle_pdf_choice_kb,
+    cycle_sheets_kb,
+    cycle_sheets_apply_kb,
     cycle_item_preview_kb,
 )
 from utils import (
     parse_dates_range,
+    date_range_is_valid,
     format_materials_with_certs,
-    build_template_data, resolve_section_hint,
-    materials_to_json, act_filename,
-    _range_str_from_numbers, _first_position_number,
+    build_template_data,
+    resolve_section_hint,
+    materials_to_json,
+    act_filename,
+    compose_full_work,
+    _range_str_from_numbers,
+    _first_position_number,
     _show_positions_menu,
 )
 from materials_view import show_material_categories
-from handlers_certs import _start_cert_flow
-
 
 router = Router()
 
@@ -58,6 +89,7 @@ router = Router()
 # =====================================================================
 #  КОНСТРУКТОР ЦИКЛОВ — просмотр и редактирование
 # =====================================================================
+
 
 @router.callback_query(CycleRun.choosing_cycle, F.data.startswith("cyc:"))
 async def cb_choose_cycle(call: CallbackQuery, state: FSMContext):
@@ -71,7 +103,7 @@ async def _show_cycle_view(call: CallbackQuery, state: FSMContext, cycle_id: int
         await call.answer("Цикл не найден", show_alert=True)
         return
     tg_id = call.from_user.id
-    is_owner = (cycle.get("owner_tg_id") == tg_id)
+    is_owner = cycle.get("owner_tg_id") == tg_id
     is_default = bool(cycle.get("is_default"))
     items = get_cycle_items(cycle_id)
     lines = [f"📋 {cycle['name']}"]
@@ -106,8 +138,7 @@ async def cb_cyc_back_list(call: CallbackQuery, state: FSMContext):
 async def cb_cycle_new(call: CallbackQuery, state: FSMContext):
     await call.answer()
     await state.set_state(CycleRun.entering_cycle_name)
-    await call.message.answer("📝 Введите название нового цикла:",
-                              reply_markup=cancel_kb())
+    await call.message.answer("📝 Введите название нового цикла:", reply_markup=cancel_kb())
 
 
 @router.message(CycleRun.entering_cycle_name)
@@ -118,8 +149,7 @@ async def msg_cycle_new_name(message: Message, state: FSMContext):
         return
     await state.update_data(new_cycle_name=name)
     await state.set_state(CycleRun.entering_cycle_description)
-    await message.answer("📋 Описание цикла (или «—» чтобы пропустить):",
-                         reply_markup=cancel_kb())
+    await message.answer("📋 Описание цикла (или «—» чтобы пропустить):", reply_markup=cancel_kb())
 
 
 @router.message(CycleRun.entering_cycle_description)
@@ -128,12 +158,10 @@ async def msg_cycle_new_desc(message: Message, state: FSMContext):
     desc = "" if text in ("—", "-", "") else text[:300]
     data = await state.get_data()
     tg_id = message.from_user.id
-    cycle_id = add_cycle(data["new_cycle_name"], desc, is_default=0,
-                          owner_tg_id=tg_id)
+    cycle_id = add_cycle(data["new_cycle_name"], desc, is_default=0, owner_tg_id=tg_id)
     await state.update_data(edit_cycle_id=cycle_id)
     await message.answer(
-        f"✅ Цикл «{data['new_cycle_name']}» создан.\n\n"
-        f"Теперь добавьте работы:"
+        f"✅ Цикл «{data['new_cycle_name']}» создан.\n\n" f"Теперь добавьте работы:"
     )
     await _show_cycle_edit_menu(message, state, cycle_id)
 
@@ -146,10 +174,11 @@ async def cb_cycle_edit_menu(call: CallbackQuery, state: FSMContext):
         await call.answer("Не найдено", show_alert=True)
         return
     tg_id = call.from_user.id
-    is_owner = (cycle.get("owner_tg_id") == tg_id)
+    is_owner = cycle.get("owner_tg_id") == tg_id
     if not is_owner and cycle.get("is_default"):
-        await call.answer("Дефолтный цикл редактировать нельзя. "
-                          "Скопируйте его себе.", show_alert=True)
+        await call.answer(
+            "Дефолтный цикл редактировать нельзя. " "Скопируйте его себе.", show_alert=True
+        )
         return
     await call.answer()
     await _show_cycle_edit_menu(call.message, state, cycle_id)
@@ -199,8 +228,9 @@ async def cb_ce_back_manage(call: CallbackQuery, state: FSMContext):
         await _show_cycle_edit_menu(call.message, state, cycle_id)
         return
     await state.set_state(CycleRun.choosing_item_to_manage)
-    await call.message.edit_text("🔀 Управление работами. Выберите:",
-                                  reply_markup=cycle_manage_items_kb(items))
+    await call.message.edit_text(
+        "🔀 Управление работами. Выберите:", reply_markup=cycle_manage_items_kb(items)
+    )
     await call.answer()
 
 
@@ -217,8 +247,10 @@ async def cb_cycle_add_item(call: CallbackQuery, state: FSMContext):
     await call.message.answer(
         "🔨 Выберите тип работы для нового шага:",
         reply_markup=work_types_kb(
-            work_types, add_new=False,
-            back_cb="cyce:back_manage", del_cb=None,
+            work_types,
+            add_new=False,
+            back_cb="cyce:back_manage",
+            del_cb=None,
         ),
     )
 
@@ -270,8 +302,7 @@ async def cb_cycle_add_item_tmpl(call: CallbackQuery, state: FSMContext):
 async def msg_cycle_custom_template(message: Message, state: FSMContext):
     text = (message.text or "").strip()
     if not text or "{common}" not in text:
-        await message.answer("⚠️ Нужен текст со словом {common}.",
-                             reply_markup=cancel_kb())
+        await message.answer("⚠️ Нужен текст со словом {common}.", reply_markup=cancel_kb())
         return
     await state.update_data(new_step_template=text)
     await _save_new_step(message, state)
@@ -299,12 +330,12 @@ async def cb_cycle_manage(call: CallbackQuery, state: FSMContext):
         return
     await state.update_data(edit_cycle_id=cycle_id)
     await state.set_state(CycleRun.choosing_item_to_manage)
-    await call.message.edit_text("🔀 Управление работами. Выберите:",
-                                  reply_markup=cycle_manage_items_kb(items))
+    await call.message.edit_text(
+        "🔀 Управление работами. Выберите:", reply_markup=cycle_manage_items_kb(items)
+    )
 
 
-@router.callback_query(CycleRun.choosing_item_to_manage,
-                       F.data.startswith("cyci:edit:"))
+@router.callback_query(CycleRun.choosing_item_to_manage, F.data.startswith("cyci:edit:"))
 async def cb_cycle_manage_item(call: CallbackQuery, state: FSMContext):
     item_id = int(call.data.split(":")[2])
     item = get_cycle_item(item_id)
@@ -385,8 +416,9 @@ async def cb_item_del(call: CallbackQuery, state: FSMContext):
     items = get_cycle_items(cycle_id)
     await state.update_data(edit_cycle_id=cycle_id)
     await state.set_state(CycleRun.choosing_item_to_manage)
-    await call.message.edit_text("🔀 Управление работами. Выберите:",
-                                  reply_markup=cycle_manage_items_kb(items))
+    await call.message.edit_text(
+        "🔀 Управление работами. Выберите:", reply_markup=cycle_manage_items_kb(items)
+    )
 
 
 @router.callback_query(F.data.startswith("cyci:tmpl:"))
@@ -395,8 +427,7 @@ async def cb_item_tmpl(call: CallbackQuery, state: FSMContext):
     await state.update_data(manage_item_id=item_id)
     await state.set_state(CycleRun.editing_item_template)
     await call.answer()
-    await call.message.answer("📝 Выберите новый шаблон:",
-                              reply_markup=step_template_kb())
+    await call.message.answer("📝 Выберите новый шаблон:", reply_markup=step_template_kb())
 
 
 @router.callback_query(CycleRun.editing_item_template, F.data.startswith("tmpl:"))
@@ -405,8 +436,7 @@ async def cb_item_tmpl_set(call: CallbackQuery, state: FSMContext):
     if tmpl_value == "custom":
         await call.answer()
         await state.set_state(CycleRun.editing_item_custom_template)
-        await call.message.answer("📝 Введите шаблон со словом {common}:",
-                                  reply_markup=cancel_kb())
+        await call.message.answer("📝 Введите шаблон со словом {common}:", reply_markup=cancel_kb())
         return
     data = await state.get_data()
     item_id = data["manage_item_id"]
@@ -420,8 +450,7 @@ async def cb_item_tmpl_set(call: CallbackQuery, state: FSMContext):
 async def msg_edit_custom_template(message: Message, state: FSMContext):
     text = (message.text or "").strip()
     if not text or "{common}" not in text:
-        await message.answer("⚠️ Нужен текст со словом {common}.",
-                             reply_markup=cancel_kb())
+        await message.answer("⚠️ Нужен текст со словом {common}.", reply_markup=cancel_kb())
         return
     data = await state.get_data()
     item_id = data["manage_item_id"]
@@ -456,8 +485,10 @@ async def cb_item_wt(call: CallbackQuery, state: FSMContext):
     await call.message.answer(
         "🔨 Выберите новый тип работы:",
         reply_markup=work_types_kb(
-            work_types, add_new=False,
-            back_cb="cyce:back_manage", del_cb=None,
+            work_types,
+            add_new=False,
+            back_cb="cyce:back_manage",
+            del_cb=None,
         ),
     )
 
@@ -487,8 +518,7 @@ async def msg_cycle_rename(message: Message, state: FSMContext):
     data = await state.get_data()
     cycle_id = data["edit_cycle_id"]
     if not update_cycle(cycle_id, name=text):
-        await message.answer("⚠️ Имя занято. Введите другое.",
-                             reply_markup=cancel_kb())
+        await message.answer("⚠️ Имя занято. Введите другое.", reply_markup=cancel_kb())
         return
     await message.answer("✅ Переименовано.")
     await _show_cycle_edit_menu(message, state, cycle_id)
@@ -532,9 +562,7 @@ async def cb_cycle_copy(call: CallbackQuery, state: FSMContext):
         return
     await call.answer("✅ Скопировано")
     new_cycle = get_cycle(new_id)
-    await call.message.answer(
-        f"✅ Создана ваша версия: «{new_cycle['name']}»."
-    )
+    await call.message.answer(f"✅ Создана ваша версия: «{new_cycle['name']}».")
     await _show_cycle_edit_menu(call.message, state, new_id)
 
 
@@ -578,6 +606,7 @@ async def cb_cycle_del(call: CallbackQuery, state: FSMContext):
 #  ЗАПУСК ЦИКЛА
 # =====================================================================
 
+
 @router.callback_query(CycleRun.viewing_cycle, F.data.startswith("cyc_run:"))
 async def cb_run_cycle(call: CallbackQuery, state: FSMContext):
     cycle_id = int(call.data.split(":")[1])
@@ -591,9 +620,15 @@ async def cb_run_cycle(call: CallbackQuery, state: FSMContext):
         await call.answer("Нет объектов", show_alert=True)
         return
     await state.update_data(
-        cycle_id=cycle_id, cycle_name=cycle["name"], items=items, idx=0,
-        previous_sheets=None, sheets_for_all=None,
-        apply_sheets_decided=False, results=[], certs_result={},
+        cycle_id=cycle_id,
+        cycle_name=cycle["name"],
+        items=items,
+        idx=0,
+        previous_sheets=None,
+        sheets_for_all=None,
+        apply_sheets_decided=False,
+        results=[],
+        certs_result={},
     )
     await state.set_state(CycleRun.choosing_object)
     await call.message.edit_text(
@@ -616,8 +651,7 @@ async def cb_cycle_choose_object(call: CallbackQuery, state: FSMContext):
         return
     await state.update_data(object_id=obj_id)
     await state.set_state(CycleRun.choosing_position)
-    await _show_positions_menu(call.message, state,
-                               prefix=f"🏗 {obj['name'][:60]}…\n\n📍 Позиция:")
+    await _show_positions_menu(call.message, state, prefix=f"🏗 {obj['name'][:60]}…\n\n📍 Позиция:")
     await call.answer()
 
 
@@ -707,8 +741,7 @@ async def cb_cycle_position_all(call: CallbackQuery, state: FSMContext):
     items = data.get("items", [])
     example_line = ""
     if items:
-        example_name = render_cycle_name(items[0].get("name_template"),
-                                         "{общая часть}")
+        example_name = render_cycle_name(items[0].get("name_template"), "{общая часть}")
         example_line = (
             f"\n\nПример для 1-й работы:\n"
             f"«{items[0]['work_type']} {example_name} "
@@ -747,8 +780,7 @@ async def _apply_cycle_position(call: CallbackQuery, state: FSMContext, pos):
     items = data.get("items", [])
     example_line = ""
     if items:
-        example_name = render_cycle_name(items[0].get("name_template"),
-                                         "{общая часть}")
+        example_name = render_cycle_name(items[0].get("name_template"), "{общая часть}")
         if pos_num:
             example_line = (
                 f"\n\nПример для 1-й работы:\n"
@@ -757,8 +789,7 @@ async def _apply_cycle_position(call: CallbackQuery, state: FSMContext, pos):
             )
         else:
             example_line = (
-                f"\n\nПример для 1-й работы:\n"
-                f"«{items[0]['work_type']} {example_name}»"
+                f"\n\nПример для 1-й работы:\n" f"«{items[0]['work_type']} {example_name}»"
             )
     await state.set_state(CycleRun.entering_common_part)
     num_line = f"№{pos_num}" if pos_num else "без номера"
@@ -785,10 +816,13 @@ async def msg_cycle_common(message: Message, state: FSMContext):
     except (ValueError, TypeError):
         base_act_number = 1
     await state.update_data(
-        common_part=common, idx=0,
+        common_part=common,
+        idx=0,
         base_act_number=base_act_number,
-        results=[], certs_result={},
-        sheets_for_all=None, apply_sheets_decided=False,
+        results=[],
+        certs_result={},
+        sheets_for_all=None,
+        apply_sheets_decided=False,
     )
     items = data["items"]
     preview_lines = [
@@ -815,8 +849,7 @@ async def _show_cycle_item(event, state: FSMContext):
     work_name = render_cycle_name(item.get("name_template"), common)
     pos_num = data.get("position_number") or ""
     if pos_num:
-        full_line = (f"→ «{item['work_type']} {work_name} "
-                     f"позиция №{pos_num}»")
+        full_line = f"→ «{item['work_type']} {work_name} " f"позиция №{pos_num}»"
     else:
         full_line = f"→ «{item['work_type']} {work_name}»"
     text = (
@@ -842,6 +875,12 @@ async def msg_item_dates(message: Message, state: FSMContext):
     except ValueError as e:
         await message.answer(f"⚠️ {e}", reply_markup=cycle_dates_kb())
         return
+    if not date_range_is_valid(start_date, end_date):
+        await message.answer(
+            "⚠️ Дата окончания не может быть раньше даты начала.",
+            reply_markup=cycle_dates_kb(),
+        )
+        return
     data = await state.get_data()
     items = data["items"]
     idx = data["idx"]
@@ -856,8 +895,7 @@ async def msg_item_dates(message: Message, state: FSMContext):
     search_num = data.get("search_position_number") or pos_num
     available_sections = get_sections_for_position(object_id, search_num)
     if not available_sections:
-        await state.update_data(item_section=None, item_cipher=None,
-                                item_pdf_path=None)
+        await state.update_data(item_section=None, item_cipher=None, item_pdf_path=None)
         await _ask_item_pdf_choice(message, state)
         return
     auto_section = resolve_section_hint(item, available_sections)
@@ -891,8 +929,7 @@ async def cb_choose_item_section(call: CallbackQuery, state: FSMContext):
     pos_num = data.get("position_number") or ""
     search_num = data.get("search_position_number") or pos_num
     if section == "none":
-        await state.update_data(item_section=None, item_cipher=None,
-                                item_pdf_path=None)
+        await state.update_data(item_section=None, item_cipher=None, item_pdf_path=None)
         await call.message.edit_text("⏭ Раздел пропущен.")
         await _ask_item_pdf_choice(call.message, state)
         await call.answer()
@@ -913,8 +950,9 @@ async def _ask_item_pdf_choice(message, state: FSMContext, section=None):
     pdf_path = data.get("item_pdf_path")
     if pdf_path and os.path.exists(pdf_path):
         await state.set_state(CycleRun.item_pdf_choice)
-        await message.answer(f"📎 Прислать PDF чертежа ({section or '—'})?",
-                             reply_markup=cycle_pdf_choice_kb())
+        await message.answer(
+            f"📎 Прислать PDF чертежа ({section or '—'})?", reply_markup=cycle_pdf_choice_kb()
+        )
     else:
         await _go_to_sheets_or_materials(message, state)
 
@@ -941,8 +979,7 @@ async def cb_item_pdf_send(call: CallbackQuery, state: FSMContext):
         else:
             try:
                 file = make_input_file(full_path)
-                await call.message.answer_document(
-                    file, caption=f"{section} · {cipher}")
+                await call.message.answer_document(file, caption=f"{section} · {cipher}")
                 await call.message.answer(f"📎 PDF ({size_mb:.1f} МБ)")
             except Exception as e:
                 await call.message.answer(f"⚠️ {e}")
@@ -981,8 +1018,9 @@ async def msg_item_sheets(message: Message, state: FSMContext):
     sheets = (message.text or "").strip()
     if not sheets or len(sheets) > 60:
         data = await state.get_data()
-        await message.answer("⚠️ 1-60 символов.",
-                             reply_markup=cycle_sheets_kb(data.get("previous_sheets")))
+        await message.answer(
+            "⚠️ 1-60 символов.", reply_markup=cycle_sheets_kb(data.get("previous_sheets"))
+        )
         return
     await state.update_data(item_sheets=sheets)
     await _handle_sheets_received(message, state)
@@ -1008,8 +1046,7 @@ async def cb_item_back_pdf(call: CallbackQuery, state: FSMContext):
     pdf_path = data.get("item_pdf_path")
     if pdf_path and os.path.exists(pdf_path):
         await state.set_state(CycleRun.item_pdf_choice)
-        await call.message.answer("📎 Прислать PDF?",
-                                  reply_markup=cycle_pdf_choice_kb())
+        await call.message.answer("📎 Прислать PDF?", reply_markup=cycle_pdf_choice_kb())
     else:
         await _show_cycle_item(call, state)
 
@@ -1021,8 +1058,7 @@ async def _handle_sheets_received(message, state: FSMContext):
     if idx == 0 and len(items) > 1 and not data.get("apply_sheets_decided"):
         await state.set_state(CycleRun.item_sheets_apply)
         await message.answer(
-            f"📄 Листы: {data['item_sheets']}\n\n"
-            f"Применить ко всем {len(items)} работам?",
+            f"📄 Листы: {data['item_sheets']}\n\n" f"Применить ко всем {len(items)} работам?",
             reply_markup=cycle_sheets_apply_kb(),
         )
         return
@@ -1055,8 +1091,9 @@ async def cb_sheets_per_item(call: CallbackQuery, state: FSMContext):
 async def cb_item_back_common(call: CallbackQuery, state: FSMContext):
     await call.answer()
     await state.set_state(CycleRun.entering_common_part)
-    await call.message.answer("📝 Введите новую общую часть. Прогресс сбросится.",
-                              reply_markup=cancel_kb())
+    await call.message.answer(
+        "📝 Введите новую общую часть. Прогресс сбросится.", reply_markup=cancel_kb()
+    )
 
 
 async def _ask_item_materials(message, state: FSMContext):
@@ -1068,8 +1105,7 @@ async def _ask_item_materials(message, state: FSMContext):
     work_type_name = item.get("work_type", "")
 
     # предзаполняем auto_selected по materials_hint
-    auto_selected = find_materials_by_hint(data["object_id"],
-                                            item.get("materials_hint"))
+    auto_selected = find_materials_by_hint(data["object_id"], item.get("materials_hint"))
     await state.update_data(
         cycle_selected_materials=auto_selected,
         work_type_name=work_type_name,
@@ -1098,10 +1134,27 @@ async def _show_item_preview_msg(message, state: FSMContext):
     selected = [m for m in materials if m["id"] in selected_ids]
     certs_result = data.get("certs_result", {})
     materials_str = format_materials_with_certs(selected, certs_result) or "—"
-    if pos_num:
-        full_line = f"{item['work_type']} {work_name} позиция №{pos_num}"
-    else:
-        full_line = f"{item['work_type']} {work_name}"
+    full_line = compose_full_work(item["work_type"], work_name, pos_num)
+    duplicate = find_duplicate_act(
+        object_id,
+        item["work_type"],
+        work_name,
+        pos_num,
+        start_date.get("full") or "",
+        end_date.get("full") or "",
+    )
+    errors, warnings = validate_act_payload(
+        act_number=act_number,
+        work_type_name=item["work_type"],
+        work_name=work_name,
+        full_work=full_line,
+        start_date=start_date,
+        end_date=end_date,
+        position_number=pos_num,
+        selected_materials=selected,
+        certs_result=certs_result,
+        duplicate=duplicate,
+    )
     text = (
         f"📋 Работа {idx + 1}/{len(items)}\n"
         f"🔨 {item['work_type']}\n📝 {work_name}\n\n"
@@ -1111,6 +1164,9 @@ async def _show_item_preview_msg(message, state: FSMContext):
         f"📄 Листы: {sheets}\n"
         f"📦 {materials_str[:250]}"
     )
+    check_text = validation_text(errors, warnings)
+    if check_text:
+        text += "\n\n" + check_text
     await state.set_state(CycleRun.item_preview)
     await message.answer(text, reply_markup=cycle_item_preview_kb())
 
@@ -1125,8 +1181,7 @@ async def cb_preview_edit(call: CallbackQuery, state: FSMContext):
 async def cb_preview_pause(call: CallbackQuery, state: FSMContext):
     await call.answer("Остановлено.")
     await state.clear()
-    await call.message.answer("⏸ Цикл остановлен. Начните заново.",
-                              reply_markup=main_menu_kb())
+    await call.message.answer("⏸ Цикл остановлен. Начните заново.", reply_markup=main_menu_kb())
 
 
 @router.callback_query(CycleRun.item_preview, F.data == "preview_create")
@@ -1140,10 +1195,7 @@ async def cb_preview_create(call: CallbackQuery, state: FSMContext):
         common = data["common_part"]
         pos_num = data.get("position_number") or ""
         work_name = render_cycle_name(item.get("name_template"), common)
-        if pos_num:
-            full_work = f"{item['work_type']} {work_name} позиция №{pos_num}"
-        else:
-            full_work = f"{item['work_type']} {work_name}"
+        full_work = compose_full_work(item["work_type"], work_name, pos_num)
         sheets = data["item_sheets"]
         object_id = data["object_id"]
         position_id = data.get("position_id")
@@ -1158,47 +1210,85 @@ async def cb_preview_create(call: CallbackQuery, state: FSMContext):
         selected_ids = data.get("cycle_selected_materials", [])
         selected = [m for m in materials if m["id"] in selected_ids]
         certs_result = data.get("certs_result", {})
+        errors, _warnings = validate_act_payload(
+            act_number=act_number,
+            work_type_name=item["work_type"],
+            work_name=work_name,
+            full_work=full_work,
+            start_date=start_date,
+            end_date=end_date,
+            position_number=pos_num,
+            selected_materials=selected,
+            certs_result=certs_result,
+        )
+        if errors:
+            await call.message.answer(
+                f"❌ Акт №{act_number} не сохранён:\n• " + "\n• ".join(errors)
+            )
+            return
         materials_str = format_materials_with_certs(selected, certs_result)
         materials_json = materials_to_json(selected, certs_result)
         author_sup = is_author_supervision(object_id, item["work_type"])
         template_data = build_template_data(
-            obj, full_work, sheets, cipher or "—",
-            start_date, end_date, act_date,
-            materials_str, act_number,
+            obj,
+            full_work,
+            sheets,
+            cipher or "—",
+            start_date,
+            end_date,
+            act_date,
+            materials_str,
+            act_number,
             author_supervision=author_sup,
         )
-        out_path = ACTS_DIR / act_filename(
-            act_number, item["work_type"], work_name, pos_num)
+        target = ACTS_DIR / act_filename(act_number, item["work_type"], work_name, pos_num)
         try:
-            out_path = build_act(template_data, out_path=out_path)
+            out_path, _act_id = create_act_with_file(
+                template_data,
+                target,
+                object_id=object_id,
+                position_id=position_id,
+                act_number=act_number,
+                act_date=act_date["full"],
+                start_date=start_date["full"],
+                end_date=end_date["full"],
+                work_full=full_work,
+                sheets=sheets,
+                section=section,
+                cipher=cipher,
+                work_type_name=item["work_type"],
+                work_name=work_name,
+                position_number=pos_num,
+                materials_data=materials_json,
+                status="ready",
+            )
+        except DuplicateActNumberError:
+            await call.message.answer(
+                f"⚠️ Акт №{act_number} уже существует. " "Цикл остановлен, измените базовый номер."
+            )
+            return
         except Exception as e:
             traceback.print_exc()
             await call.message.answer(f"❌ Ошибка №{act_number}: {e}")
             return
-        save_act(
-            object_id=object_id, position_id=position_id, act_number=act_number,
-            act_date=act_date["full"], start_date=start_date["full"],
-            end_date=end_date["full"], work_full=full_work,
-            file_path=to_stored_path(out_path),
-            sheets=sheets, section=section, cipher=cipher,
-            work_type_name=item["work_type"], work_name=work_name,
-            position_number=pos_num, materials_data=materials_json,
-            status="ready",
-        )
         try:
             file = FSInputFile(out_path)
             await call.message.answer_document(
-                file, caption=f"Акт №{act_number} — {item['work_type']}")
+                file, caption=f"Акт №{act_number} — {item['work_type']}"
+            )
         except Exception as e:
             await call.message.answer(f"⚠️ {e}")
         results = data.get("results", [])
-        results.append({"num": act_number, "work": full_work,
-                        "sheets": sheets, "materials": materials_str})
+        results.append(
+            {"num": act_number, "work": full_work, "sheets": sheets, "materials": materials_str}
+        )
         new_idx = idx + 1
         await state.update_data(
-            results=results, idx=new_idx,
+            results=results,
+            idx=new_idx,
             previous_sheets=sheets,
-            cycle_selected_materials=[], certs_result={},
+            cycle_selected_materials=[],
+            certs_result={},
         )
         if new_idx >= len(items):
             await _finish_cycle(call, state)
@@ -1235,9 +1325,7 @@ async def _finish_cycle(event, state: FSMContext):
                 "Акты:",
             ]
             for r in results:
-                lines.append(
-                    f"  • №{r['num']} — {r['work'][:55]}… (листы: {r['sheets']})"
-                )
+                lines.append(f"  • №{r['num']} — {r['work'][:55]}… (листы: {r['sheets']})")
             text = "\n".join(lines)
     except Exception as e:
         text = f"⚠️ Цикл завершён (ошибка: {e})"

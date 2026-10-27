@@ -10,6 +10,7 @@
 
 Используется всеми тремя контекстами.
 """
+
 import logging
 
 from aiogram import Router, F
@@ -17,19 +18,26 @@ from aiogram.fsm.context import FSMContext
 from aiogram.types import Message, CallbackQuery
 
 from db import (
-    get_materials_for_object, get_material, add_material,
+    get_materials_for_object,
+    get_material,
+    add_material,
     get_all_material_categories,
 )
 from states import MaterialFromAct, NewAct, CycleRun, EditAct
 from keyboards import (
-    cancel_kb, material_add_category_kb, material_add_doc_ask_kb,
+    cancel_kb,
+    material_add_category_kb,
+    material_add_doc_ask_kb,
 )
 from materials_view import (
-    show_material_categories, show_materials_in_category,
-    selected_key, work_type_key, get_selected, get_work_type,
+    show_material_categories,
+    show_materials_in_category,
+    selected_key,
+    work_type_key,
+    get_selected,
+    get_work_type,
 )
 from utils import split_materials_by_work_type
-
 
 router = Router()
 logger = logging.getLogger(__name__)
@@ -50,6 +58,7 @@ def _ctx_from_state(current):
 # =====================================================================
 #  КАТЕГОРИИ → МАТЕРИАЛЫ
 # =====================================================================
+
 
 @router.callback_query(F.data.startswith("matcat_pick:"))
 async def cb_matcat_pick(call: CallbackQuery, state: FSMContext):
@@ -87,6 +96,7 @@ async def cb_matcat_back(call: CallbackQuery, state: FSMContext):
 #  TOGGLE МАТЕРИАЛА
 # =====================================================================
 
+
 @router.callback_query(F.data.startswith("mat:"))
 async def cb_toggle_material(call: CallbackQuery, state: FSMContext):
     current = await state.get_state()
@@ -115,19 +125,22 @@ async def cb_toggle_material(call: CallbackQuery, state: FSMContext):
     work_type_name = get_work_type(data, ctx)
 
     if cat_id == 0:
-        materials = get_materials_for_object(object_id,
-                                              work_type=work_type_name)
+        materials = get_materials_for_object(object_id, work_type=work_type_name)
     elif cat_id in (None, -1):
-        materials = [m for m in get_materials_for_object(
-            object_id, work_type=work_type_name) if not m.get("category_id")]
+        materials = [
+            m
+            for m in get_materials_for_object(object_id, work_type=work_type_name)
+            if not m.get("category_id")
+        ]
     else:
-        materials = get_materials_for_object(object_id,
-                                              work_type=work_type_name,
-                                              category_id=cat_id)
+        materials = get_materials_for_object(
+            object_id, work_type=work_type_name, category_id=cat_id
+        )
 
     matched = split_materials_by_work_type(materials, work_type_name)
 
     from keyboards import materials_in_category_kb
+
     try:
         await call.message.edit_reply_markup(
             reply_markup=materials_in_category_kb(materials, selected, matched)
@@ -140,6 +153,7 @@ async def cb_toggle_material(call: CallbackQuery, state: FSMContext):
 # =====================================================================
 #  ЗАВЕРШЕНИЕ ВЫБОРА
 # =====================================================================
+
 
 @router.callback_query(F.data == "mat_done")
 async def cb_materials_done(call: CallbackQuery, state: FSMContext):
@@ -159,34 +173,43 @@ async def cb_materials_done(call: CallbackQuery, state: FSMContext):
             if data.get("_edit_mode"):
                 await state.update_data(_edit_mode=False)
                 from handlers import _show_final_preview
+
                 await _show_final_preview(call.message, state)
                 return
             if not data.get("start_date") or not data.get("end_date"):
                 await state.set_state(NewAct.entering_start_date)
                 from keyboards import step_with_back_and_delete_kb
-                await call.message.answer("📅 Дата начала работ (ДД.ММ.ГГГГ):",
-                                           reply_markup=step_with_back_and_delete_kb())
+
+                await call.message.answer(
+                    "📅 Дата начала работ (ДД.ММ.ГГГГ):",
+                    reply_markup=step_with_back_and_delete_kb(),
+                )
                 return
             from handlers import _show_final_preview
+
             await _show_final_preview(call.message, state)
             return
         await state.update_data(certs_result={})
         from handlers_certs import _start_cert_flow
+
         await _start_cert_flow(call.message, state, selected_ids, kind="newact")
 
     elif ctx == "cycle":
         if not selected_ids:
             from handlers_cycles import _show_item_preview_msg
+
             await _show_item_preview_msg(call.message, state)
             return
         await state.update_data(certs_result={})
         from handlers_certs import _start_cert_flow
+
         await _start_cert_flow(call.message, state, selected_ids, kind="cycle")
 
     elif ctx == "edit":
         await state.update_data(edit_certs_result={})
         if not selected_ids:
             from handlers_my_acts import _edit_send_menu
+
             await _edit_send_menu(call.message, state)
             return
         # подменяем object_id для cert-flow
@@ -197,6 +220,7 @@ async def cb_materials_done(call: CallbackQuery, state: FSMContext):
             certs_result={},
         )
         from handlers_certs import _cert_next
+
         await state.set_state(EditAct.choosing_cert)
         await _cert_next(call, state, kind="edit")
 
@@ -204,6 +228,7 @@ async def cb_materials_done(call: CallbackQuery, state: FSMContext):
 # =====================================================================
 #  ДОБАВЛЕНИЕ НОВОГО МАТЕРИАЛА «НА ЛЕТУ»
 # =====================================================================
+
 
 @router.callback_query(F.data == "mat_add_new")
 async def cb_mat_add_new(call: CallbackQuery, state: FSMContext):
@@ -249,8 +274,7 @@ async def msg_mat_new_qdoc(message: Message, state: FSMContext):
     await state.update_data(_mat_add_qdoc=qdoc)
     await state.set_state(MaterialFromAct.entering_work_types)
     await message.answer(
-        "🔨 Типы работ (через `|`, например «Бетонирование|Армирование»).\n"
-        "Или «—»:",
+        "🔨 Типы работ (через `|`, например «Бетонирование|Армирование»).\n" "Или «—»:",
         reply_markup=cancel_kb(),
     )
 
@@ -268,14 +292,14 @@ async def msg_mat_new_work_types(message: Message, state: FSMContext):
     await message.answer(
         "📁 Выбери категорию:",
         reply_markup=material_add_category_kb(
-            categories, back_cb="mat_add_back_to_list",
+            categories,
+            back_cb="mat_add_back_to_list",
             cb_prefix="mat_add_cat",
         ),
     )
 
 
-@router.callback_query(MaterialFromAct.choosing_category,
-                       F.data.startswith("mat_add_cat:"))
+@router.callback_query(MaterialFromAct.choosing_category, F.data.startswith("mat_add_cat:"))
 async def cb_mat_add_cat(call: CallbackQuery, state: FSMContext):
     raw = call.data.split(":", 1)[1]
     cat_id = int(raw) if raw else 0
@@ -305,8 +329,11 @@ async def _finish_material_create(message, state: FSMContext):
     ctx = data.get("_mat_add_ctx")
 
     new_id = add_material(
-        name=name, quality_doc=qdoc, object_id=object_id,
-        work_types=work_types, category_id=category_id,
+        name=name,
+        quality_doc=qdoc,
+        object_id=object_id,
+        work_types=work_types,
+        category_id=category_id,
     )
     await state.update_data(_mat_add_new_id=new_id)
 
@@ -326,8 +353,7 @@ async def _finish_material_create(message, state: FSMContext):
     )
 
 
-@router.callback_query(MaterialFromAct.asking_add_doc,
-                       F.data == "mat_add_doc_no")
+@router.callback_query(MaterialFromAct.asking_add_doc, F.data == "mat_add_doc_no")
 async def cb_mat_add_doc_no(call: CallbackQuery, state: FSMContext):
     await call.answer("Ок, потом")
     data = await state.get_data()
@@ -338,8 +364,7 @@ async def cb_mat_add_doc_no(call: CallbackQuery, state: FSMContext):
     await show_material_categories(call.message, state, ctx)
 
 
-@router.callback_query(MaterialFromAct.asking_add_doc,
-                       F.data == "mat_add_doc_yes")
+@router.callback_query(MaterialFromAct.asking_add_doc, F.data == "mat_add_doc_yes")
 async def cb_mat_add_doc_yes(call: CallbackQuery, state: FSMContext):
     await call.answer()
     data = await state.get_data()
@@ -360,5 +385,6 @@ async def cb_mat_add_doc_yes(call: CallbackQuery, state: FSMContext):
         _cert_return_to_materials=True,
     )
     from handlers_certs import _cert_next
+
     kind = ctx  # newact / cycle / edit
     await _cert_next(call, state, kind=kind)

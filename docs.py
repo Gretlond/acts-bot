@@ -1,5 +1,6 @@
 # docs.py
 """Работа с PDF: поиск по позиции и разделу, отправка в Telegram."""
+
 import os
 from pathlib import Path
 
@@ -29,9 +30,13 @@ def check_size(full_path):
     size_bytes = os.path.getsize(full_path)
     size_mb = size_bytes / (1024 * 1024)
     if size_mb > MAX_TELEGRAM_SIZE_MB:
-        return False, size_mb, (
-            f"Файл {size_mb:.1f} МБ — больше лимита Telegram "
-            f"({MAX_TELEGRAM_SIZE_MB} МБ). Откройте его из папки project/"
+        return (
+            False,
+            size_mb,
+            (
+                f"Файл {size_mb:.1f} МБ — больше лимита Telegram "
+                f"({MAX_TELEGRAM_SIZE_MB} МБ). Откройте его из папки project/"
+            ),
         )
     return True, size_mb, None
 

@@ -4,6 +4,7 @@ Setup-визард, меню «🏗 Проект», категории мате�
 и сертификатов с типами документов.
 Подключается ПЕРВЫМ роутером (см. bot.py).
 """
+
 import traceback
 
 from aiogram import Router, F
@@ -13,33 +14,52 @@ from aiogram.types import Message, CallbackQuery
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
 from db import (
-    get_all_objects, get_object, add_object, update_object,
+    get_all_objects,
+    get_object,
+    add_object,
+    update_object,
     get_all_work_types,
-    get_object_author_supervision, add_object_author_supervision,
+    get_object_author_supervision,
+    add_object_author_supervision,
     remove_object_author_supervision,
-    get_materials_for_object, get_all_materials_with_categories,
-    get_material, add_material, update_material, delete_material,
+    get_materials_for_object,
+    get_all_materials_with_categories,
+    get_material,
+    add_material,
+    update_material,
+    delete_material,
     move_material_to_category,
-    get_all_material_categories, get_material_category,
-    add_material_category, update_material_category,
-    delete_material_category, get_categories_with_counts,
+    get_all_material_categories,
+    get_material_category,
+    add_material_category,
+    update_material_category,
+    delete_material_category,
+    get_categories_with_counts,
     count_materials_in_category,
-    get_certificates_for_material, add_certificate, delete_certificate,
+    get_certificates_for_material,
+    add_certificate,
+    delete_certificate,
     get_conn,
 )
 from keyboards import (
-    main_menu_kb, cancel_kb,
-    setup_confirm_scan_kb, setup_skip_kb, setup_works_kb,
-    project_menu_kb, project_person_kb,
+    main_menu_kb,
+    cancel_kb,
+    setup_confirm_scan_kb,
+    setup_skip_kb,
+    setup_works_kb,
+    project_menu_kb,
+    project_person_kb,
     project_author_works_kb,
     material_categories_kb,
-    project_materials_kb, material_card_ext_kb,
-    move_material_category_kb, material_add_category_kb,
-    project_certs_kb, cert_type_choice_kb,
+    project_materials_kb,
+    material_card_ext_kb,
+    move_material_category_kb,
+    material_add_category_kb,
+    project_certs_kb,
+    cert_type_choice_kb,
 )
 from states import ProjectSetup, ProjectEdit
 from sync import scan_only, apply_scan
-
 
 router = Router()
 
@@ -47,6 +67,7 @@ router = Router()
 # =====================================================================
 #  УТИЛИТЫ
 # =====================================================================
+
 
 def _make_short_name(full_name: str) -> str:
     """'Иванова Ивана Ивановича' → 'Иванов И.И.'"""
@@ -93,15 +114,15 @@ def _category_view_kb(category_id, materials):
             text += "…"
         builder.button(text=text, callback_data=f"pmat:view:{m['id']}")
     if category_id is not None and category_id != -1:
-        builder.button(text="➕ Добавить в эту категорию",
-                       callback_data=f"pmat:add_in_cat:{category_id}")
-        builder.button(text="📝 Переименовать категорию",
-                       callback_data=f"pmat:cat_rename:{category_id}")
-        builder.button(text="🗑 Удалить категорию",
-                       callback_data=f"pmat:cat_del:{category_id}")
+        builder.button(
+            text="➕ Добавить в эту категорию", callback_data=f"pmat:add_in_cat:{category_id}"
+        )
+        builder.button(
+            text="📝 Переименовать категорию", callback_data=f"pmat:cat_rename:{category_id}"
+        )
+        builder.button(text="🗑 Удалить категорию", callback_data=f"pmat:cat_del:{category_id}")
     else:
-        builder.button(text="➕ Добавить в «Без категории»",
-                       callback_data="pmat:add_in_cat:0")
+        builder.button(text="➕ Добавить в «Без категории»", callback_data="pmat:add_in_cat:0")
     builder.button(text="🔙 К категориям", callback_data="pmat:list")
     builder.button(text="❌", callback_data="cancel")
     builder.adjust(1)
@@ -111,6 +132,7 @@ def _category_view_kb(category_id, materials):
 # =====================================================================
 #  /start
 # =====================================================================
+
 
 @router.message(Command("start"))
 async def cmd_start(message: Message, state: FSMContext):
@@ -212,10 +234,13 @@ async def msg_setup_object_name(message: Message, state: FSMContext):
         return
     data = await state.get_data()
     new_id = add_object({"name": name})
-    added_pos, added_drw = apply_scan(new_id, {
-        "positions": data.get("scan_positions", {}),
-        "drawings": data.get("scan_drawings", []),
-    })
+    added_pos, added_drw = apply_scan(
+        new_id,
+        {
+            "positions": data.get("scan_positions", {}),
+            "drawings": data.get("scan_drawings", []),
+        },
+    )
     await state.update_data(object_id=new_id)
     await message.answer(
         f"✅ Объект создан.\nПозиций: {added_pos}, чертежей: {added_drw}.\n\n"
@@ -225,6 +250,7 @@ async def msg_setup_object_name(message: Message, state: FSMContext):
 
 
 # ---------- Госстройнадзор ----------
+
 
 async def _ask_tech_post(message, state: FSMContext):
     await state.set_state(ProjectSetup.entering_tech_post)
@@ -239,8 +265,7 @@ async def _ask_tech_post(message, state: FSMContext):
 async def msg_setup_tech_post(message: Message, state: FSMContext):
     text = (message.text or "").strip()
     if not text or len(text) > 200:
-        await message.answer("⚠️ 1-200 символов.",
-                             reply_markup=setup_skip_kb("tech"))
+        await message.answer("⚠️ 1-200 символов.", reply_markup=setup_skip_kb("tech"))
         return
     await state.update_data(tech_post=text)
     await state.set_state(ProjectSetup.entering_tech_place)
@@ -255,8 +280,7 @@ async def msg_setup_tech_place(message: Message, state: FSMContext):
         return
     await state.update_data(tech_place=text)
     await state.set_state(ProjectSetup.entering_tech_name)
-    await message.answer("👤 ФИО представителя технадзора:",
-                         reply_markup=cancel_kb())
+    await message.answer("👤 ФИО представителя технадзора:", reply_markup=cancel_kb())
 
 
 @router.message(ProjectSetup.entering_tech_name)
@@ -278,8 +302,7 @@ async def msg_setup_tech_name(message: Message, state: FSMContext):
     await _ask_author_post(message, state)
 
 
-@router.callback_query(ProjectSetup.entering_tech_post,
-                       F.data == "setup:skip:tech")
+@router.callback_query(ProjectSetup.entering_tech_post, F.data == "setup:skip:tech")
 async def cb_skip_tech(call: CallbackQuery, state: FSMContext):
     await call.answer("Пропущено")
     await call.message.edit_text("⏭ Госстройнадзор пропущен.")
@@ -288,11 +311,11 @@ async def cb_skip_tech(call: CallbackQuery, state: FSMContext):
 
 # ---------- Авторский надзор ----------
 
+
 async def _ask_author_post(message, state: FSMContext):
     await state.set_state(ProjectSetup.entering_author_post)
     await message.answer(
-        "🎨 Авторский надзор.\n\n📝 Должность (например: «ГИП»)\n"
-        "Или нажми «Пропустить»:",
+        "🎨 Авторский надзор.\n\n📝 Должность (например: «ГИП»)\n" "Или нажми «Пропустить»:",
         reply_markup=setup_skip_kb("author"),
     )
 
@@ -301,8 +324,7 @@ async def _ask_author_post(message, state: FSMContext):
 async def msg_setup_author_post(message: Message, state: FSMContext):
     text = (message.text or "").strip()
     if not text or len(text) > 200:
-        await message.answer("⚠️ 1-200 символов.",
-                             reply_markup=setup_skip_kb("author"))
+        await message.answer("⚠️ 1-200 символов.", reply_markup=setup_skip_kb("author"))
         return
     await state.update_data(author_post=text)
     await state.set_state(ProjectSetup.entering_author_place)
@@ -339,8 +361,7 @@ async def msg_setup_author_name(message: Message, state: FSMContext):
     await _ask_designer_firm(message, state)
 
 
-@router.callback_query(ProjectSetup.entering_author_post,
-                       F.data == "setup:skip:author")
+@router.callback_query(ProjectSetup.entering_author_post, F.data == "setup:skip:author")
 async def cb_skip_author(call: CallbackQuery, state: FSMContext):
     await call.answer("Пропущено")
     await call.message.edit_text("⏭ Авторский надзор пропущен.")
@@ -349,11 +370,11 @@ async def cb_skip_author(call: CallbackQuery, state: FSMContext):
 
 # ---------- Проектировщик ----------
 
+
 async def _ask_designer_firm(message, state: FSMContext):
     await state.set_state(ProjectSetup.entering_designer_firm)
     await message.answer(
-        "🏢 Организация-проектировщик "
-        "(например: ООО «Проектировщик»):",
+        "🏢 Организация-проектировщик " "(например: ООО «Проектировщик»):",
         reply_markup=setup_skip_kb("designer"),
     )
 
@@ -362,13 +383,11 @@ async def _ask_designer_firm(message, state: FSMContext):
 async def msg_setup_designer_firm(message: Message, state: FSMContext):
     text = (message.text or "").strip()
     if not text or len(text) > 300:
-        await message.answer("⚠️ 1-300 символов.",
-                             reply_markup=setup_skip_kb("designer"))
+        await message.answer("⚠️ 1-300 символов.", reply_markup=setup_skip_kb("designer"))
         return
     await state.update_data(designer_firm=text)
     await state.set_state(ProjectSetup.entering_designer_date)
-    await message.answer("📅 Дата проекта (например: 01.2026):",
-                         reply_markup=cancel_kb())
+    await message.answer("📅 Дата проекта (например: 01.2026):", reply_markup=cancel_kb())
 
 
 @router.message(ProjectSetup.entering_designer_date)
@@ -378,15 +397,12 @@ async def msg_setup_designer_date(message: Message, state: FSMContext):
         await message.answer("⚠️ 1-20 символов.", reply_markup=cancel_kb())
         return
     data = await state.get_data()
-    update_object(data["object_id"],
-                  project_firm=data["designer_firm"],
-                  project_date=text)
+    update_object(data["object_id"], project_firm=data["designer_firm"], project_date=text)
     await message.answer("✅ Сохранено.")
     await _ask_author_works(message, state)
 
 
-@router.callback_query(ProjectSetup.entering_designer_firm,
-                       F.data == "setup:skip:designer")
+@router.callback_query(ProjectSetup.entering_designer_firm, F.data == "setup:skip:designer")
 async def cb_skip_designer(call: CallbackQuery, state: FSMContext):
     await call.answer("Пропущено")
     await call.message.edit_text("⏭ Проектировщик пропущен.")
@@ -395,13 +411,15 @@ async def cb_skip_designer(call: CallbackQuery, state: FSMContext):
 
 # ---------- Работы с автнадзором ----------
 
+
 async def _ask_author_works(message, state: FSMContext):
     work_types = get_all_work_types()
     if not work_types:
         await _finish_setup(message, state)
         return
-    default = [w["name"] for w in work_types
-               if w["name"].lower() in ("армирование", "гидроизоляция")]
+    default = [
+        w["name"] for w in work_types if w["name"].lower() in ("армирование", "гидроизоляция")
+    ]
     await state.update_data(author_works_selected=default)
     await state.set_state(ProjectSetup.choosing_author_works)
     await message.answer(
@@ -412,8 +430,7 @@ async def _ask_author_works(message, state: FSMContext):
     )
 
 
-@router.callback_query(ProjectSetup.choosing_author_works,
-                       F.data.startswith("setup:aw:"))
+@router.callback_query(ProjectSetup.choosing_author_works, F.data.startswith("setup:aw:"))
 async def cb_setup_aw_toggle(call: CallbackQuery, state: FSMContext):
     wt_id = int(call.data.split(":")[2])
     work_types = get_all_work_types()
@@ -428,14 +445,11 @@ async def cb_setup_aw_toggle(call: CallbackQuery, state: FSMContext):
     else:
         selected.append(wt["name"])
     await state.update_data(author_works_selected=selected)
-    await call.message.edit_reply_markup(
-        reply_markup=setup_works_kb(work_types, selected)
-    )
+    await call.message.edit_reply_markup(reply_markup=setup_works_kb(work_types, selected))
     await call.answer()
 
 
-@router.callback_query(ProjectSetup.choosing_author_works,
-                       F.data == "setup:aw_done")
+@router.callback_query(ProjectSetup.choosing_author_works, F.data == "setup:aw_done")
 async def cb_setup_aw_done(call: CallbackQuery, state: FSMContext):
     await call.answer()
     data = await state.get_data()
@@ -445,8 +459,7 @@ async def cb_setup_aw_done(call: CallbackQuery, state: FSMContext):
     for w in set(selected) - existing:
         add_object_author_supervision(obj_id, w)
     await call.message.edit_text(
-        f"✅ Работ с автнадзором: {len(selected)}\n"
-        + (", ".join(selected) if selected else "—")
+        f"✅ Работ с автнадзором: {len(selected)}\n" + (", ".join(selected) if selected else "—")
     )
     await _finish_setup(call.message, state)
 
@@ -464,13 +477,13 @@ async def _finish_setup(message, state: FSMContext):
 #  МЕНЮ «🏗 ПРОЕКТ»
 # =====================================================================
 
+
 @router.message(Command("project"))
 @router.message(F.text.contains("🏗 Проект"))
 async def cmd_project(message: Message, state: FSMContext):
     await state.clear()
     if not _current_object():
-        await message.answer("⚠️ Объект не настроен. /start",
-                             reply_markup=main_menu_kb())
+        await message.answer("⚠️ Объект не настроен. /start", reply_markup=main_menu_kb())
         return
     await _show_project_menu(message, state)
 
@@ -500,6 +513,7 @@ async def cb_pj_menu(call: CallbackQuery, state: FSMContext):
 
 
 # ---------- Название объекта ----------
+
 
 @router.callback_query(F.data == "pj:name")
 async def cb_pj_name(call: CallbackQuery, state: FSMContext):
@@ -532,8 +546,10 @@ async def msg_pj_object_name(message: Message, state: FSMContext):
 
 PERSON_PREFIXES = {
     "gen": {
-        "post": "gen_person_post", "place_field": "gen_contractor",
-        "name": "gen_person", "short": "gen_short",
+        "post": "gen_person_post",
+        "place_field": "gen_contractor",
+        "name": "gen_person",
+        "short": "gen_short",
         "label": "Генподрядчик",
         "post_state": ProjectEdit.entering_gen_post,
         "firm_state": ProjectEdit.entering_gen_firm,
@@ -541,8 +557,10 @@ PERSON_PREFIXES = {
         "kb_prefix": "pg",
     },
     "subgen": {
-        "post": "subgen_person_post", "place_field": "subgen_firm",
-        "name": "subgen_person", "short": "subgen_short",
+        "post": "subgen_person_post",
+        "place_field": "subgen_firm",
+        "name": "subgen_person",
+        "short": "subgen_short",
         "label": "Субподрядчик",
         "post_state": ProjectEdit.entering_subgen_post,
         "firm_state": ProjectEdit.entering_subgen_firm,
@@ -550,8 +568,10 @@ PERSON_PREFIXES = {
         "kb_prefix": "ps",
     },
     "tech": {
-        "post": "tech_post", "place_field": "tech_place",
-        "name": "tech_name", "short": "tech_short",
+        "post": "tech_post",
+        "place_field": "tech_place",
+        "name": "tech_name",
+        "short": "tech_short",
         "label": "Госстройнадзор",
         "post_state": ProjectEdit.entering_tech_post,
         "firm_state": ProjectEdit.entering_tech_place,
@@ -559,8 +579,10 @@ PERSON_PREFIXES = {
         "kb_prefix": "pt",
     },
     "author": {
-        "post": "author_post", "place_field": "author_place",
-        "name": "author_name", "short": "author_short",
+        "post": "author_post",
+        "place_field": "author_place",
+        "name": "author_name",
+        "short": "author_short",
         "label": "Авторский надзор",
         "post_state": ProjectEdit.entering_author_post,
         "firm_state": ProjectEdit.entering_author_place,
@@ -583,8 +605,7 @@ async def cb_pj_person(call: CallbackQuery, state: FSMContext):
         f"  • ФИО: {obj.get(cfg['name']) or '—'}\n\n"
         f"Что изменить?"
     )
-    await call.message.edit_text(text,
-                                  reply_markup=project_person_kb(cfg["kb_prefix"]))
+    await call.message.edit_text(text, reply_markup=project_person_kb(cfg["kb_prefix"]))
 
 
 def _find_person_by_state(current_state, kind):
@@ -602,8 +623,7 @@ def _find_person_by_state(current_state, kind):
 async def cb_pj_person_field(call: CallbackQuery, state: FSMContext):
     kb_pref = call.data.split(":")[0]
     field = call.data.split(":")[1]
-    prefix = {"pg": "gen", "ps": "subgen",
-              "pt": "tech", "pa": "author"}[kb_pref]
+    prefix = {"pg": "gen", "ps": "subgen", "pt": "tech", "pa": "author"}[kb_pref]
     cfg = PERSON_PREFIXES[prefix]
     obj = _current_object()
     if field == "post":
@@ -687,6 +707,7 @@ async def msg_pj_person_name(message: Message, state: FSMContext):
 
 # ---------- Проектировщик ----------
 
+
 @router.callback_query(F.data == "pj:designer")
 async def cb_pj_designer(call: CallbackQuery, state: FSMContext):
     await call.answer()
@@ -709,8 +730,7 @@ async def msg_pj_designer_firm(message: Message, state: FSMContext):
     obj = _current_object()
     update_object(obj["id"], project_firm=text)
     await state.set_state(ProjectEdit.entering_designer_date)
-    await message.answer("📅 Дата проекта (например: 01.2026):",
-                         reply_markup=cancel_kb())
+    await message.answer("📅 Дата проекта (например: 01.2026):", reply_markup=cancel_kb())
 
 
 @router.message(ProjectEdit.entering_designer_date)
@@ -727,6 +747,7 @@ async def msg_pj_designer_date(message: Message, state: FSMContext):
 
 # ---------- Работы с автнадзором ----------
 
+
 @router.callback_query(F.data == "pj:author_works")
 async def cb_pj_author_works(call: CallbackQuery, state: FSMContext):
     await call.answer()
@@ -741,8 +762,7 @@ async def cb_pj_author_works(call: CallbackQuery, state: FSMContext):
     )
 
 
-@router.callback_query(ProjectEdit.choosing_author_works,
-                       F.data.startswith("paw:toggle:"))
+@router.callback_query(ProjectEdit.choosing_author_works, F.data.startswith("paw:toggle:"))
 async def cb_paw_toggle(call: CallbackQuery, state: FSMContext):
     wt_id = int(call.data.split(":")[2])
     work_types = get_all_work_types()
@@ -757,9 +777,7 @@ async def cb_paw_toggle(call: CallbackQuery, state: FSMContext):
     else:
         selected.append(wt["name"])
     await state.update_data(author_works_selected=selected)
-    await call.message.edit_reply_markup(
-        reply_markup=project_author_works_kb(work_types, selected)
-    )
+    await call.message.edit_reply_markup(reply_markup=project_author_works_kb(work_types, selected))
     await call.answer()
 
 
@@ -775,15 +793,14 @@ async def cb_paw_done(call: CallbackQuery, state: FSMContext):
         remove_object_author_supervision(obj["id"], w)
     for w in new_set - existing:
         add_object_author_supervision(obj["id"], w)
-    await call.message.edit_text(
-        f"✅ Сохранено. Работ с автнадзором: {len(selected)}"
-    )
+    await call.message.edit_text(f"✅ Сохранено. Работ с автнадзором: {len(selected)}")
     await _show_project_menu(call.message, state)
 
 
 # =====================================================================
 #  МАТЕРИАЛЫ И КАТЕГОРИИ
 # =====================================================================
+
 
 async def _render_categories(message, state: FSMContext, edit=False):
     obj = _current_object()
@@ -794,8 +811,7 @@ async def _render_categories(message, state: FSMContext, edit=False):
         f"Категорий: {len(cats)}, материалов всего: {total}\n\n"
         f"Выбери категорию:"
     )
-    kb = material_categories_kb(cats, total_count=total,
-                                 back_cb="pj:menu", add_cb="pmat:add")
+    kb = material_categories_kb(cats, total_count=total, back_cb="pj:menu", add_cb="pmat:add")
     if edit:
         try:
             await message.edit_text(text, reply_markup=kb)
@@ -813,6 +829,7 @@ async def cb_pj_materials(call: CallbackQuery, state: FSMContext):
 
 
 # ---------- Просмотр категории: показываем материалы списком ----------
+
 
 @router.callback_query(F.data.startswith("pmat:cat:"))
 async def cb_pmat_cat_view(call: CallbackQuery, state: FSMContext):
@@ -881,8 +898,7 @@ async def cb_pmat_add_in_cat(call: CallbackQuery, state: FSMContext):
     )
     await state.set_state(ProjectEdit.entering_material_name)
     await call.message.answer(
-        f"📁 Категория: {cat_label}\n\n"
-        f"📝 Название материала:",
+        f"📁 Категория: {cat_label}\n\n" f"📝 Название материала:",
         reply_markup=cancel_kb(),
     )
 
@@ -898,14 +914,13 @@ async def cb_pmat_all(call: CallbackQuery, state: FSMContext):
     await state.set_state(ProjectEdit.materials_menu)
     text = f"📂 Все материалы ({len(materials)}):"
     try:
-        await call.message.edit_text(text,
-                                      reply_markup=project_materials_kb(materials))
+        await call.message.edit_text(text, reply_markup=project_materials_kb(materials))
     except Exception:
-        await call.message.answer(text,
-                                  reply_markup=project_materials_kb(materials))
+        await call.message.answer(text, reply_markup=project_materials_kb(materials))
 
 
 # ---------- Карточка материала ----------
+
 
 @router.callback_query(F.data.startswith("pmat:view:"))
 async def cb_pmat_view(call: CallbackQuery, state: FSMContext):
@@ -934,6 +949,7 @@ async def cb_pmat_view(call: CallbackQuery, state: FSMContext):
 
 # ---------- Добавление нового материала ----------
 
+
 @router.callback_query(F.data == "pmat:add")
 async def cb_pmat_add(call: CallbackQuery, state: FSMContext):
     await call.answer()
@@ -955,8 +971,9 @@ async def msg_pmat_name(message: Message, state: FSMContext):
         return
     await state.update_data(new_material_name=name)
     await state.set_state(ProjectEdit.entering_material_qdoc)
-    await message.answer("📄 Нормативный документ (ГОСТ/ТУ/СТБ). Или «—»:",
-                         reply_markup=cancel_kb())
+    await message.answer(
+        "📄 Нормативный документ (ГОСТ/ТУ/СТБ). Или «—»:", reply_markup=cancel_kb()
+    )
 
 
 @router.message(ProjectEdit.entering_material_qdoc)
@@ -966,8 +983,7 @@ async def msg_pmat_qdoc(message: Message, state: FSMContext):
     await state.update_data(new_material_qdoc=qdoc)
     await state.set_state(ProjectEdit.entering_material_work_types)
     await message.answer(
-        "🔨 Типы работ (через `|`, например «Бетонирование|Армирование»).\n"
-        "Или «—»:",
+        "🔨 Типы работ (через `|`, например «Бетонирование|Армирование»).\n" "Или «—»:",
         reply_markup=cancel_kb(),
     )
 
@@ -990,13 +1006,16 @@ async def msg_pmat_work_types(message: Message, state: FSMContext):
     await message.answer(
         "📁 Выбери категорию:",
         reply_markup=material_add_category_kb(
-            cats, back_cb="pmat:list", cb_prefix="pmat:new_in_cat",
+            cats,
+            back_cb="pmat:list",
+            cb_prefix="pmat:new_in_cat",
         ),
     )
 
 
-@router.callback_query(ProjectEdit.choosing_category_for_new_material,
-                       F.data.startswith("pmat:new_in_cat:"))
+@router.callback_query(
+    ProjectEdit.choosing_category_for_new_material, F.data.startswith("pmat:new_in_cat:")
+)
 async def cb_pmat_new_in_cat(call: CallbackQuery, state: FSMContext):
     raw = call.data.split(":", 2)[2]
     cat_id = int(raw) if raw else 0
@@ -1014,21 +1033,27 @@ async def _save_new_material(message, state: FSMContext):
     obj = _current_object()
     try:
         new_id = add_material(
-            name=name, quality_doc=qdoc, object_id=obj["id"],
-            work_types=wt, category_id=cat_id,
+            name=name,
+            quality_doc=qdoc,
+            object_id=obj["id"],
+            work_types=wt,
+            category_id=cat_id,
         )
     except Exception as e:
         await message.answer(f"⚠️ Ошибка: {e}")
         return
     await state.update_data(
-        new_material_name=None, new_material_qdoc=None,
-        new_material_work_types=None, new_material_category_id=None,
+        new_material_name=None,
+        new_material_qdoc=None,
+        new_material_work_types=None,
+        new_material_category_id=None,
     )
     await message.answer(f"✅ «{name}» добавлен.")
     await _render_categories(message, state)
 
 
 # ---------- Переименование материала ----------
+
 
 @router.callback_query(F.data.startswith("pmat:edit:"))
 async def cb_pmat_edit(call: CallbackQuery, state: FSMContext):
@@ -1059,6 +1084,7 @@ async def msg_pmat_edit_name(message: Message, state: FSMContext):
 
 # ---------- Перенос между категориями ----------
 
+
 @router.callback_query(F.data.startswith("pmat:move:"))
 async def cb_pmat_move(call: CallbackQuery, state: FSMContext):
     await call.answer()
@@ -1080,8 +1106,7 @@ async def cb_pmat_move(call: CallbackQuery, state: FSMContext):
     )
 
 
-@router.callback_query(ProjectEdit.choosing_category_for_move,
-                       F.data.startswith("pmat:move_to:"))
+@router.callback_query(ProjectEdit.choosing_category_for_move, F.data.startswith("pmat:move_to:"))
 async def cb_pmat_move_to(call: CallbackQuery, state: FSMContext):
     parts = call.data.split(":")
     mat_id = int(parts[2])
@@ -1089,13 +1114,12 @@ async def cb_pmat_move_to(call: CallbackQuery, state: FSMContext):
     await call.answer()
     move_material_to_category(mat_id, cat_id or None)
     mat = get_material(mat_id)
-    await call.message.answer(
-        f"✅ «{mat['name']}» → {mat.get('category_name') or 'без категории'}"
-    )
+    await call.message.answer(f"✅ «{mat['name']}» → {mat.get('category_name') or 'без категории'}")
     await _render_categories(call.message, state)
 
 
 # ---------- Удаление материала ----------
+
 
 @router.callback_query(F.data.startswith("pmat:del:"))
 async def cb_pmat_del(call: CallbackQuery, state: FSMContext):
@@ -1113,12 +1137,12 @@ async def cb_pmat_del(call: CallbackQuery, state: FSMContext):
 #  КАТЕГОРИИ — CRUD
 # =====================================================================
 
+
 @router.callback_query(F.data == "pmat:new_cat")
 async def cb_pmat_new_cat(call: CallbackQuery, state: FSMContext):
     await call.answer()
     await state.set_state(ProjectEdit.entering_material_category_name)
-    await call.message.answer("📝 Название новой категории:",
-                              reply_markup=cancel_kb())
+    await call.message.answer("📝 Название новой категории:", reply_markup=cancel_kb())
 
 
 @router.message(ProjectEdit.entering_material_category_name)
@@ -1181,8 +1205,9 @@ async def cb_pmat_cat_del(call: CallbackQuery, state: FSMContext):
         return
     await call.answer()
     builder = InlineKeyboardBuilder()
-    builder.button(text="🗑 Удалить, материалы без категории",
-                   callback_data=f"pmat:cat_del_force:{cat_id}")
+    builder.button(
+        text="🗑 Удалить, материалы без категории", callback_data=f"pmat:cat_del_force:{cat_id}"
+    )
     builder.button(text="↩ Отмена", callback_data=f"pmat:cat:{cat_id}")
     builder.adjust(1)
     await call.message.answer(
@@ -1208,6 +1233,7 @@ async def cb_pmat_cat_del_force(call: CallbackQuery, state: FSMContext):
 #  СЕРТИФИКАТЫ МАТЕРИАЛА
 # =====================================================================
 
+
 @router.callback_query(F.data.startswith("pmat:certs:"))
 async def cb_pmat_certs(call: CallbackQuery, state: FSMContext):
     await call.answer()
@@ -1219,11 +1245,9 @@ async def cb_pmat_certs(call: CallbackQuery, state: FSMContext):
     await state.set_state(ProjectEdit.material_certs_menu)
     text = f"📜 Документы «{mat['name']}» ({len(certs)}):"
     try:
-        await call.message.edit_text(text,
-                                      reply_markup=project_certs_kb(mat_id, certs))
+        await call.message.edit_text(text, reply_markup=project_certs_kb(mat_id, certs))
     except Exception:
-        await call.message.answer(text,
-                                  reply_markup=project_certs_kb(mat_id, certs))
+        await call.message.answer(text, reply_markup=project_certs_kb(mat_id, certs))
 
 
 @router.callback_query(F.data.startswith("pcert:add:"))
@@ -1238,8 +1262,7 @@ async def cb_pcert_add(call: CallbackQuery, state: FSMContext):
     )
 
 
-@router.callback_query(ProjectEdit.entering_cert_doc_type,
-                       F.data.startswith("cert_type:"))
+@router.callback_query(ProjectEdit.entering_cert_doc_type, F.data.startswith("cert_type:"))
 async def cb_pcert_type(call: CallbackQuery, state: FSMContext):
     choice = call.data.split(":", 1)[1]
     if choice == "custom":
@@ -1276,8 +1299,7 @@ async def msg_pcert_number(message: Message, state: FSMContext):
         return
     await state.update_data(cert_number=text)
     await state.set_state(ProjectEdit.entering_cert_date)
-    await message.answer("📅 Дата выдачи (ДД.ММ.ГГГГ) или «—»:",
-                         reply_markup=cancel_kb())
+    await message.answer("📅 Дата выдачи (ДД.ММ.ГГГГ) или «—»:", reply_markup=cancel_kb())
 
 
 @router.message(ProjectEdit.entering_cert_date)
@@ -1293,14 +1315,12 @@ async def msg_pcert_date(message: Message, state: FSMContext):
                 raise ValueError
             date_str = f"{d:02d}.{m:02d}.{y}"
         except Exception:
-            await message.answer("⚠️ Формат: ДД.ММ.ГГГГ или «—»",
-                                 reply_markup=cancel_kb())
+            await message.answer("⚠️ Формат: ДД.ММ.ГГГГ или «—»", reply_markup=cancel_kb())
             return
     data = await state.get_data()
     mat_id = data["cert_material_id"]
     doc_type = data.get("cert_doc_type")
-    add_certificate(mat_id, data["cert_number"],
-                    date_from=date_str, doc_type=doc_type)
+    add_certificate(mat_id, data["cert_number"], date_from=date_str, doc_type=doc_type)
     await state.update_data(cert_doc_type=None)
     await message.answer("✅ Документ добавлен.")
     mat = get_material(mat_id)
@@ -1316,8 +1336,7 @@ async def msg_pcert_date(message: Message, state: FSMContext):
 async def cb_pcert_del(call: CallbackQuery, state: FSMContext):
     cert_id = int(call.data.split(":")[2])
     conn = get_conn()
-    row = conn.execute("SELECT material_id FROM certificates WHERE id = ?",
-                       (cert_id,)).fetchone()
+    row = conn.execute("SELECT material_id FROM certificates WHERE id = ?", (cert_id,)).fetchone()
     conn.close()
     if not row:
         await call.answer("Не найдено")
@@ -1344,6 +1363,7 @@ async def cb_pcert_del(call: CallbackQuery, state: FSMContext):
 #  ПЕРЕСКАНИРОВАНИЕ
 # =====================================================================
 
+
 @router.callback_query(F.data == "pj:rescan")
 async def cb_pj_rescan(call: CallbackQuery, state: FSMContext):
     await call.answer("Сканирую…")
@@ -1366,6 +1386,7 @@ async def cb_pj_rescan(call: CallbackQuery, state: FSMContext):
 #  CANCEL в состояниях проекта
 # =====================================================================
 
+
 @router.callback_query(StateFilter(ProjectSetup), F.data == "cancel")
 @router.callback_query(StateFilter(ProjectEdit), F.data == "cancel")
 async def cb_cancel_project(call: CallbackQuery, state: FSMContext):
@@ -1376,5 +1397,4 @@ async def cb_cancel_project(call: CallbackQuery, state: FSMContext):
         await call.message.answer("❌ Отменено.")
     await call.answer()
     if _current_object():
-        await call.message.answer("Выбери действие:",
-                                  reply_markup=main_menu_kb())
+        await call.message.answer("Выбери действие:", reply_markup=main_menu_kb())

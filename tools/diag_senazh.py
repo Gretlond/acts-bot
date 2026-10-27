@@ -1,4 +1,11 @@
-# diag_senazh.py
+# tools/diag_senazh.py
+import sys
+from pathlib import Path
+
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+if hasattr(sys.stdout, "reconfigure"):
+    sys.stdout.reconfigure(encoding="utf-8")
+
 from db import get_conn, get_positions_for_object, get_all_objects
 
 obj = get_all_objects()[0]

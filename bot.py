@@ -3,14 +3,20 @@ import asyncio
 import logging
 
 from aiogram import Bot, Dispatcher, BaseMiddleware
-from aiogram.fsm.storage.memory import MemoryStorage
 from aiogram.types import CallbackQuery, Message
 
+from backup import backup_loop, run_backup
 from config import (
-    ACCESS_OPEN, ALLOWED_USER_IDS, ALLOW_ANY_USER, BOT_TOKEN,
-    ensure_dirs, is_user_allowed,
+    ACCESS_OPEN,
+    ALLOWED_USER_IDS,
+    BOT_TOKEN,
+    ensure_dirs,
+    is_user_allowed,
 )
 from db import init_db
+from fsm_storage import SQLiteStorage
+from heartbeat import heartbeat_loop, write_heartbeat
+from storage import move_legacy_bak_files
 from handlers import router
 from project_handlers import router as project_router
 from handlers_common import router as common_router
@@ -27,12 +33,11 @@ logger = logging.getLogger(__name__)
 
 if not BOT_TOKEN:
     raise RuntimeError(
-        "BOT_TOKEN не найден. Создайте файл .env в корне проекта "
-        "со строкой: BOT_TOKEN=ваш_токен"
+        "BOT_TOKEN не найден. Создайте файл .env в корне проекта " "со строкой: BOT_TOKEN=ваш_токен"
     )
 
 bot = Bot(token=BOT_TOKEN, request_timeout=300)
-dp = Dispatcher(storage=MemoryStorage())
+dp = Dispatcher(storage=SQLiteStorage())
 
 
 class LogMiddleware(BaseMiddleware):
@@ -58,7 +63,8 @@ class AccessMiddleware(BaseMiddleware):
         user_id = user.id if user else "не определён"
         logger.warning(
             "Отказ доступа: id=%s username=%s",
-            user_id, getattr(user, "username", None),
+            user_id,
+            getattr(user, "username", None),
         )
         if isinstance(event, CallbackQuery):
             await event.answer(
@@ -101,6 +107,10 @@ async def main():
     ensure_dirs()
     # Миграции и создание таблиц при старте (безопасно, IF NOT EXISTS)
     init_db()
+    move_legacy_bak_files()
+    write_heartbeat()
+    # Копия при старте и ежедневная — в отдельном потоке.
+    await asyncio.to_thread(run_backup, "startup")
 
     if ACCESS_OPEN:
         logger.warning(
@@ -118,7 +128,16 @@ async def main():
     print("🤖 Бот запущен. Ctrl+C для остановки.")
     me = await bot.get_me()
     print(f"→ @{me.username}")
-    await dp.start_polling(bot)
+    tasks = [
+        asyncio.create_task(heartbeat_loop(), name="heartbeat"),
+        asyncio.create_task(backup_loop(), name="backup"),
+    ]
+    try:
+        await dp.start_polling(bot)
+    finally:
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 if __name__ == "__main__":

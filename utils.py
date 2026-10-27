@@ -3,17 +3,29 @@
 Общие утилиты для handlers_*.py.
 Чистые функции без aiogram-роутеров.
 """
+
 import re
 import json
+from datetime import date as date_cls
 
 from db import get_conn, get_positions_for_object
 from generate_act import split_with_limits
 from keyboards import positions_grouped_kb
 
-
 MONTHS_RU = [
-    "", "января", "февраля", "марта", "апреля", "мая", "июня",
-    "июля", "августа", "сентября", "октября", "ноября", "декабря",
+    "",
+    "января",
+    "февраля",
+    "марта",
+    "апреля",
+    "мая",
+    "июня",
+    "июля",
+    "августа",
+    "сентября",
+    "октября",
+    "ноября",
+    "декабря",
 ]
 
 CERT_DOC_TYPES = {
@@ -24,8 +36,12 @@ CERT_DOC_TYPES = {
 
 
 def _date_dict(d, m, y):
-    if not (1 <= d <= 31 and 1 <= m <= 12 and 2000 <= y <= 2100):
+    if not (2000 <= y <= 2100):
         raise ValueError("Некорректная дата")
+    try:
+        date_cls(y, m, d)
+    except ValueError as exc:
+        raise ValueError("Некорректная дата") from exc
     return {
         "day": str(d).zfill(2),
         "month_num": str(m).zfill(2),
@@ -36,26 +52,45 @@ def _date_dict(d, m, y):
 
 
 def parse_date(text: str) -> dict:
-    text = text.strip().replace("/", ".").replace("-", ".")
-    text = text.rstrip(" г.").rstrip("г.").rstrip()
+    text = (text or "").strip().replace("/", ".").replace("-", ".")
+    text = re.sub(r"\s*г\.?\s*$", "", text, flags=re.IGNORECASE).strip()
     parts = text.split(".")
     if len(parts) != 3:
         raise ValueError("Ожидается формат ДД.ММ.ГГГГ")
-    return _date_dict(int(parts[0]), int(parts[1]), int(parts[2]))
+    try:
+        d, m, y = (int(part) for part in parts)
+    except ValueError as exc:
+        raise ValueError("Ожидается формат ДД.ММ.ГГГГ") from exc
+    return _date_dict(d, m, y)
+
+
+def date_key(value) -> tuple[int, int, int]:
+    """Дата в виде (год, месяц, день) для сравнения и сортировки."""
+    if isinstance(value, dict):
+        return (int(value["year"]), int(value["month_num"]), int(value["day"]))
+    parsed = parse_date(str(value or ""))
+    return (int(parsed["year"]), int(parsed["month_num"]), int(parsed["day"]))
+
+
+def date_range_is_valid(start_date, end_date) -> bool:
+    try:
+        return date_key(start_date) <= date_key(end_date)
+    except (KeyError, TypeError, ValueError):
+        return False
 
 
 def parse_dates_range(text: str):
     text = text.strip()
     m = re.match(
-        r'^(\d{1,2})[./\-](\d{1,2})[./\-](\d{4})\s*[-\u2013\u2014]\s*'
-        r'(\d{1,2})[./\-](\d{1,2})[./\-](\d{4})$',
-        text
+        r"^(\d{1,2})[./\-](\d{1,2})[./\-](\d{4})\s*[-\u2013\u2014]\s*"
+        r"(\d{1,2})[./\-](\d{1,2})[./\-](\d{4})$",
+        text,
     )
     if m:
         start = _date_dict(int(m.group(1)), int(m.group(2)), int(m.group(3)))
         end = _date_dict(int(m.group(4)), int(m.group(5)), int(m.group(6)))
         return start, end
-    m = re.match(r'^(\d{1,2})[./\-](\d{1,2})[./\-](\d{4})$', text)
+    m = re.match(r"^(\d{1,2})[./\-](\d{1,2})[./\-](\d{4})$", text)
     if m:
         d = _date_dict(int(m.group(1)), int(m.group(2)), int(m.group(3)))
         return d, d
@@ -77,9 +112,28 @@ def format_materials_with_certs(selected, certs_result):
 
 
 WINDOWS_RESERVED_NAMES = {
-    "CON", "PRN", "AUX", "NUL",
-    "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
-    "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+    "CON",
+    "PRN",
+    "AUX",
+    "NUL",
+    "COM1",
+    "COM2",
+    "COM3",
+    "COM4",
+    "COM5",
+    "COM6",
+    "COM7",
+    "COM8",
+    "COM9",
+    "LPT1",
+    "LPT2",
+    "LPT3",
+    "LPT4",
+    "LPT5",
+    "LPT6",
+    "LPT7",
+    "LPT8",
+    "LPT9",
 }
 
 
@@ -98,18 +152,18 @@ def _filename_part(value, max_len):
 def act_filename(act_number, work_type_name="", work_name="", position_number=""):
     """
     Читаемое имя файла акта:
-    АКТ№103 (Бетонирование) поз. №33.docx
+    АКТ №103 Бетонирование поз. №33.docx
 
-    В скобках — тип работы; если его нет, берётся наименование работы.
+    Тип работы идёт без скобок. Если типа нет, берётся наименование работы.
     Номер позиции может быть диапазоном: 21-28.
     """
     number = _filename_part(act_number, 20) or "б_н"
     work = _filename_part(work_type_name or work_name, 60)
     position = _filename_part(position_number, 24)
 
-    parts = [f"АКТ№{number}"]
+    parts = [f"АКТ №{number}"]
     if work:
-        parts.append(f"({work})")
+        parts.append(work)
     if position:
         parts.append(f"поз. №{position}")
 
@@ -117,6 +171,17 @@ def act_filename(act_number, work_type_name="", work_name="", position_number=""
     if len(name) > 150:
         name = name[:150].rstrip(" .")
     return f"{name}.docx"
+
+
+def compose_full_work(work_type_name="", work_name="", position_number=""):
+    """Единое формирование полного наименования работы для всех сценариев."""
+    base = " ".join(
+        str(part).strip() for part in (work_type_name, work_name) if part and str(part).strip()
+    )
+    position = str(position_number or "").strip()
+    if position:
+        return f"{base} позиция №{position}".strip()
+    return base
 
 
 def safe_filename(act_number, cipher):
@@ -137,24 +202,29 @@ def _join_nonempty(*parts):
     return " ".join(str(p).strip() for p in parts if p and str(p).strip())
 
 
-def build_template_data(obj, full_work, sheets, cipher,
-                        start_date, end_date, act_date,
-                        materials_str, act_number,
-                        author_supervision=False):
+def build_template_data(
+    obj,
+    full_work,
+    sheets,
+    cipher,
+    start_date,
+    end_date,
+    act_date,
+    materials_str,
+    act_number,
+    author_supervision=False,
+):
     top = split_with_limits(full_work, [74, 74])
     bot = split_with_limits(full_work, [25, 90, 90])
     project_name = strip_outer_quotes(obj.get("name"))
     obj_lines = split_with_limits(project_name, [70, 90])
 
-    tech_full = _join_nonempty(
-        obj.get("tech_post"), obj.get("tech_place"), obj.get("tech_name")
-    )
+    tech_full = _join_nonempty(obj.get("tech_post"), obj.get("tech_place"), obj.get("tech_name"))
     tech = split_with_limits(tech_full, [50, 90])
 
     if author_supervision:
         author_full = _join_nonempty(
-            obj.get("author_post"), obj.get("author_place"),
-            obj.get("author_name")
+            obj.get("author_post"), obj.get("author_place"), obj.get("author_name")
         )
     else:
         author_full = ""
@@ -177,10 +247,15 @@ def build_template_data(obj, full_work, sheets, cipher,
 
     return {
         "act_number": act_number,
-        "work_top_1": top[0], "work_top_2": top[1],
-        "work_bot_1": bot[0], "work_bot_2": bot[1], "work_bot_3": bot[2],
-        "project_full_name1": obj_lines[0], "project_full_name2": obj_lines[1],
-        "act_day": act_date["day"], "act_month": act_date["month_name"],
+        "work_top_1": top[0],
+        "work_top_2": top[1],
+        "work_bot_1": bot[0],
+        "work_bot_2": bot[1],
+        "work_bot_3": bot[2],
+        "project_full_name1": obj_lines[0],
+        "project_full_name2": obj_lines[1],
+        "act_day": act_date["day"],
+        "act_month": act_date["month_name"],
         "act_year": act_date["year"],
         "gen_person_post": obj.get("gen_person_post") or "",
         "gen_person_firm": obj.get("gen_contractor") or "",
@@ -188,12 +263,17 @@ def build_template_data(obj, full_work, sheets, cipher,
         "gen_short": obj.get("gen_short") or "",
         "subgen_person": obj.get("subgen_person") or "",
         "subgen_short": obj.get("subgen_short") or "",
-        "tech_1": tech[0], "tech_2": tech[1],
+        "tech_1": tech[0],
+        "tech_2": tech[1],
         "tech_short": obj.get("tech_short") or "",
-        "author_1": author[0], "author_2": author[1],
+        "author_1": author[0],
+        "author_2": author[1],
         "author_short": (obj.get("author_short") or "") if author_supervision else "",
-        "project_doc_1": proj[0], "project_doc_2": proj[1],
-        "materials_1": mat[0], "materials_2": mat[1], "materials_3": mat[2],
+        "project_doc_1": proj[0],
+        "project_doc_2": proj[1],
+        "materials_1": mat[0],
+        "materials_2": mat[1],
+        "materials_3": mat[2],
         "start_date": start_date["full"],
         "end_date": end_date["full"],
         "sign_d": act_date["full"],
@@ -309,7 +389,7 @@ def _get_cipher_map(object_id):
     rows = conn.execute(
         "SELECT position_number, cipher FROM drawings "
         "WHERE object_id = ? ORDER BY position_number, cipher",
-        (object_id,)
+        (object_id,),
     ).fetchall()
     conn.close()
     result = {}
@@ -323,6 +403,7 @@ def _get_cipher_map(object_id):
 def build_position_groups(positions, cipher_map=None):
     """Группировка по (имя, cipher). Разделяет 21-28 и 29-32."""
     from collections import OrderedDict
+
     cipher_map = cipher_map or {}
     real, virtual = [], []
     for p in positions:
@@ -343,17 +424,21 @@ def build_position_groups(positions, cipher_map=None):
 
     result = []
     for _, items in groups_map.items():
-        result.append({
-            "name": items[0].get("name") or "",
-            "positions": items,
-            "numbers": [x.get("position_number") or "" for x in items],
-        })
+        result.append(
+            {
+                "name": items[0].get("name") or "",
+                "positions": items,
+                "numbers": [x.get("position_number") or "" for x in items],
+            }
+        )
     for p in virtual:
-        result.append({
-            "name": p.get("name") or "",
-            "positions": [p],
-            "numbers": [],
-        })
+        result.append(
+            {
+                "name": p.get("name") or "",
+                "positions": [p],
+                "numbers": [],
+            }
+        )
     return result
 
 
@@ -379,5 +464,4 @@ async def _show_positions_menu(message, state, prefix="📍 Выберите п�
     cipher_map = _get_cipher_map(object_id)
     groups = build_position_groups(positions, cipher_map)
     await state.update_data(position_groups=groups)
-    await message.answer(prefix,
-                         reply_markup=positions_grouped_kb(groups))
+    await message.answer(prefix, reply_markup=positions_grouped_kb(groups))

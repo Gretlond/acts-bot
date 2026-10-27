@@ -2,10 +2,10 @@
 from aiogram.types import ReplyKeyboardMarkup, KeyboardButton
 from aiogram.utils.keyboard import InlineKeyboardBuilder
 
-
 # =====================================================================
 #  УТИЛИТЫ
 # =====================================================================
+
 
 def _compress_nums_for_display(numbers):
     nums = []
@@ -59,17 +59,16 @@ def _group_label(group):
 #  ГЛАВНОЕ МЕНЮ
 # =====================================================================
 
+
 def main_menu_kb():
     kb = ReplyKeyboardMarkup(
         keyboard=[
-            [KeyboardButton(text="🆕 Новый акт"),
-             KeyboardButton(text="📋 Циклы работ")],
-            [KeyboardButton(text="📄 Мои акты"),
-             KeyboardButton(text="🏗 Проект")],
-            [KeyboardButton(text="❓ Помощь")],
+            [KeyboardButton(text="🆕 Новый акт"), KeyboardButton(text="📋 Циклы работ")],
+            [KeyboardButton(text="📄 Мои акты"), KeyboardButton(text="🏗 Проект")],
+            [KeyboardButton(text="🔎 Поиск актов"), KeyboardButton(text="❓ Помощь")],
         ],
         resize_keyboard=True,
-        input_field_placeholder="Выберите действие…"
+        input_field_placeholder="Выберите действие…",
     )
     return kb
 
@@ -77,6 +76,7 @@ def main_menu_kb():
 # =====================================================================
 #  ПОЗИЦИИ
 # =====================================================================
+
 
 def positions_grouped_kb(groups):
     builder = InlineKeyboardBuilder()
@@ -109,8 +109,7 @@ def position_group_action_kb(group, group_index):
     if len(text_all) > 60:
         text_all = text_all[:58] + "…"
     builder.button(text=text_all, callback_data=f"pos_all:{group_index}")
-    builder.button(text="🔢 Отдельная позиция",
-                   callback_data=f"pos_single:{group_index}")
+    builder.button(text="🔢 Отдельная позиция", callback_data=f"pos_single:{group_index}")
     builder.button(text="🔙", callback_data="pos_grp_back")
     builder.button(text="❌", callback_data="cancel")
     builder.adjust(1)
@@ -134,6 +133,7 @@ def positions_in_group_kb(positions, group_index):
 #  ПРОЧИЕ БАЗОВЫЕ
 # =====================================================================
 
+
 def objects_kb(objects):
     builder = InlineKeyboardBuilder()
     for o in objects:
@@ -146,14 +146,12 @@ def objects_kb(objects):
     return builder.as_markup()
 
 
-def work_types_kb(work_types, add_new=True, back_cb="na:back",
-                  del_cb="na:del"):
+def work_types_kb(work_types, add_new=True, back_cb="na:back", del_cb="na:del"):
     builder = InlineKeyboardBuilder()
     for wt in work_types:
         builder.button(text=wt["name"], callback_data=f"wt:{wt['id']}")
     if add_new:
-        builder.button(text="➕ Добавить новый тип работы",
-                       callback_data="wt_new")
+        builder.button(text="➕ Добавить новый тип работы", callback_data="wt_new")
     if back_cb:
         builder.button(text="🔙 Назад", callback_data=back_cb)
     if del_cb:
@@ -178,8 +176,8 @@ def sections_kb(sections, back_cb="na:back", del_cb="na:del"):
 #  МАТЕРИАЛЫ — ВЫБОР В АКТЕ (двухуровнево: категории → материалы)
 # =====================================================================
 
-def material_categories_select_kb(cats_with_selected, total_count=None,
-                                    any_selected=False):
+
+def material_categories_select_kb(cats_with_selected, total_count=None, any_selected=False):
     """Список категорий для выбора материалов в акте.
     cats_with_selected: [{"id":..,"name":..,"count":..,"selected":..,"matched":..}]
     id=0 → «Все материалы», id=-1 → «Без категории».
@@ -198,8 +196,7 @@ def material_categories_select_kb(cats_with_selected, total_count=None,
             text = text[:58] + "…"
         builder.button(text=text, callback_data=f"matcat_pick:{c['id']}")
     if total_count is not None:
-        builder.button(text=f"📂 Все материалы ({total_count})",
-                       callback_data="matcat_pick:0")
+        builder.button(text=f"📂 Все материалы ({total_count})", callback_data="matcat_pick:0")
     if any_selected:
         builder.button(text="✅ Готово", callback_data="mat_done")
     builder.button(text="❌", callback_data="cancel")
@@ -220,8 +217,7 @@ def materials_in_category_kb(materials, selected_ids, matched_ids=None):
         if len(text) > 60:
             text = text[:58] + "…"
         builder.button(text=text, callback_data=f"mat:{m['id']}")
-    builder.button(text="➕ Добавить новый материал",
-                   callback_data="mat_add_new")
+    builder.button(text="➕ Добавить новый материал", callback_data="mat_add_new")
     builder.button(text="✅ Готово", callback_data="mat_done")
     builder.button(text="🔙 К категориям", callback_data="matcat_back")
     builder.button(text="❌", callback_data="cancel")
@@ -233,8 +229,10 @@ def materials_in_category_kb(materials, selected_ids, matched_ids=None):
 #  МАТЕРИАЛЫ — ПРОЕКТ (просмотр категории с материалами)
 # =====================================================================
 
-def material_categories_kb(categories_with_counts, total_count=None,
-                           back_cb="pj:menu", add_cb="pmat:add"):
+
+def material_categories_kb(
+    categories_with_counts, total_count=None, back_cb="pj:menu", add_cb="pmat:add"
+):
     """Список категорий в меню проекта."""
     builder = InlineKeyboardBuilder()
     for c in categories_with_counts:
@@ -244,8 +242,7 @@ def material_categories_kb(categories_with_counts, total_count=None,
             text = text[:58] + "…"
         builder.button(text=text, callback_data=f"pmat:cat:{c['id']}")
     if total_count is not None:
-        builder.button(text=f"📂 Все материалы ({total_count})",
-                       callback_data="pmat:all")
+        builder.button(text=f"📂 Все материалы ({total_count})", callback_data="pmat:all")
     builder.button(text="➕ Новый материал", callback_data=add_cb)
     builder.button(text="➕ Новая категория", callback_data="pmat:new_cat")
     builder.button(text="🔙", callback_data=back_cb)
@@ -270,22 +267,17 @@ def project_materials_kb(materials, category_filter=None):
 
 def material_card_ext_kb(material_id):
     builder = InlineKeyboardBuilder()
-    builder.button(text="📜 Паспорта / сертификаты",
-                   callback_data=f"pmat:certs:{material_id}")
-    builder.button(text="✏️ Переименовать",
-                   callback_data=f"pmat:edit:{material_id}")
-    builder.button(text="📁 Перенести в категорию",
-                   callback_data=f"pmat:move:{material_id}")
-    builder.button(text="🗑 Удалить материал",
-                   callback_data=f"pmat:del:{material_id}")
+    builder.button(text="📜 Паспорта / сертификаты", callback_data=f"pmat:certs:{material_id}")
+    builder.button(text="✏️ Переименовать", callback_data=f"pmat:edit:{material_id}")
+    builder.button(text="📁 Перенести в категорию", callback_data=f"pmat:move:{material_id}")
+    builder.button(text="🗑 Удалить материал", callback_data=f"pmat:del:{material_id}")
     builder.button(text="🔙 К материалам", callback_data="pmat:list")
     builder.button(text="❌", callback_data="cancel")
     builder.adjust(1)
     return builder.as_markup()
 
 
-def move_material_category_kb(material_id, categories,
-                               current_category_id=None):
+def move_material_category_kb(material_id, categories, current_category_id=None):
     builder = InlineKeyboardBuilder()
     for cat in categories:
         if cat["id"] == current_category_id:
@@ -293,29 +285,23 @@ def move_material_category_kb(material_id, categories,
         text = f"📁 {cat['name']}"
         if len(text) > 60:
             text = text[:58] + "…"
-        builder.button(text=text,
-                       callback_data=f"pmat:move_to:{material_id}:{cat['id']}")
+        builder.button(text=text, callback_data=f"pmat:move_to:{material_id}:{cat['id']}")
     if current_category_id is not None:
-        builder.button(text="🚫 Без категории",
-                       callback_data=f"pmat:move_to:{material_id}:0")
-    builder.button(text="🔙 К материалу",
-                   callback_data=f"pmat:view:{material_id}")
+        builder.button(text="🚫 Без категории", callback_data=f"pmat:move_to:{material_id}:0")
+    builder.button(text="🔙 К материалу", callback_data=f"pmat:view:{material_id}")
     builder.button(text="❌", callback_data="cancel")
     builder.adjust(1)
     return builder.as_markup()
 
 
-def material_add_category_kb(categories, back_cb="pmat:list",
-                             cb_prefix="pmat:new_in_cat"):
+def material_add_category_kb(categories, back_cb="pmat:list", cb_prefix="pmat:new_in_cat"):
     builder = InlineKeyboardBuilder()
     for cat in categories:
         text = f"📁 {cat['name']}"
         if len(text) > 60:
             text = text[:58] + "…"
-        builder.button(text=text,
-                       callback_data=f"{cb_prefix}:{cat['id']}")
-    builder.button(text="🚫 Без категории",
-                   callback_data=f"{cb_prefix}:0")
+        builder.button(text=text, callback_data=f"{cb_prefix}:{cat['id']}")
+    builder.button(text="🚫 Без категории", callback_data=f"{cb_prefix}:0")
     builder.button(text="🔙", callback_data=back_cb)
     builder.button(text="❌", callback_data="cancel")
     builder.adjust(1)
@@ -329,10 +315,8 @@ def project_certs_kb(material_id, certs):
         if c.get("date_from"):
             label += f" от {c['date_from']}"
         builder.button(text="🗑 " + label, callback_data=f"pcert:del:{c['id']}")
-    builder.button(text="➕ Добавить документ",
-                   callback_data=f"pcert:add:{material_id}")
-    builder.button(text="🔙 К материалу",
-                   callback_data=f"pmat:view:{material_id}")
+    builder.button(text="➕ Добавить документ", callback_data=f"pcert:add:{material_id}")
+    builder.button(text="🔙 К материалу", callback_data=f"pmat:view:{material_id}")
     builder.button(text="❌", callback_data="cancel")
     builder.adjust(1)
     return builder.as_markup()
@@ -340,10 +324,8 @@ def project_certs_kb(material_id, certs):
 
 def material_add_doc_ask_kb():
     builder = InlineKeyboardBuilder()
-    builder.button(text="📜 Да, добавить документ",
-                   callback_data="mat_add_doc_yes")
-    builder.button(text="⏭ Нет, потом",
-                   callback_data="mat_add_doc_no")
+    builder.button(text="📜 Да, добавить документ", callback_data="mat_add_doc_yes")
+    builder.button(text="⏭ Нет, потом", callback_data="mat_add_doc_no")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -351,6 +333,7 @@ def material_add_doc_ask_kb():
 # =====================================================================
 #  БАЗОВЫЕ ПРОЧИЕ
 # =====================================================================
+
 
 def back_kb():
     builder = InlineKeyboardBuilder()
@@ -386,6 +369,7 @@ def draft_after_number_kb():
 #  ШАГИ NEWACT
 # =====================================================================
 
+
 def step_with_back_and_delete_kb():
     builder = InlineKeyboardBuilder()
     builder.button(text="⏸ Отложить", callback_data="na:draft")
@@ -415,6 +399,7 @@ def delete_confirm_kb():
 #  СЕРТИФИКАТЫ
 # =====================================================================
 
+
 def cert_choice_kb(saved_certs):
     builder = InlineKeyboardBuilder()
     for c in saved_certs[:5]:
@@ -433,26 +418,19 @@ def cert_choice_kb(saved_certs):
 
 def cert_save_ask_kb():
     builder = InlineKeyboardBuilder()
-    builder.button(text="📌 Сохранить для будущих актов",
-                   callback_data="cert_save_yes")
-    builder.button(text="💤 Только для этого акта",
-                   callback_data="cert_save_no")
+    builder.button(text="📌 Сохранить для будущих актов", callback_data="cert_save_yes")
+    builder.button(text="💤 Только для этого акта", callback_data="cert_save_no")
     builder.adjust(1)
     return builder.as_markup()
 
 
 def cert_type_choice_kb():
     builder = InlineKeyboardBuilder()
-    builder.button(text="📄 Паспорт качества",
-                   callback_data="cert_type:passport_quality")
-    builder.button(text="📋 Сертификат качества",
-                   callback_data="cert_type:cert_quality")
-    builder.button(text="✔️ Сертификат соответствия",
-                   callback_data="cert_type:cert_conformity")
-    builder.button(text="✏️ Свой вариант",
-                   callback_data="cert_type:custom")
-    builder.button(text="⏭ Без типа",
-                   callback_data="cert_type:skip")
+    builder.button(text="📄 Паспорт качества", callback_data="cert_type:passport_quality")
+    builder.button(text="📋 Сертификат качества", callback_data="cert_type:cert_quality")
+    builder.button(text="✔️ Сертификат соответствия", callback_data="cert_type:cert_conformity")
+    builder.button(text="✏️ Свой вариант", callback_data="cert_type:custom")
+    builder.button(text="⏭ Без типа", callback_data="cert_type:skip")
     builder.button(text="❌", callback_data="cancel")
     builder.adjust(1)
     return builder.as_markup()
@@ -461,6 +439,7 @@ def cert_type_choice_kb():
 # =====================================================================
 #  ЧЕРТЕЖИ
 # =====================================================================
+
 
 def drawing_view_kb():
     builder = InlineKeyboardBuilder()
@@ -490,9 +469,12 @@ def drawings_list_kb(drawings):
 #  ПРЕДПРОСМОТР АКТА
 # =====================================================================
 
-def act_preview_kb():
+
+def act_preview_kb(confirm_enabled=True, duplicate=False):
     builder = InlineKeyboardBuilder()
-    builder.button(text="✅ Подтвердить", callback_data="na:confirm")
+    if confirm_enabled:
+        label = "✅ Сохранить всё равно" if duplicate else "✅ Подтвердить"
+        builder.button(text=label, callback_data="na:confirm")
     builder.button(text="✏️ Изменить", callback_data="na:edit")
     builder.button(text="⏸ Отложить", callback_data="na:draft")
     builder.button(text="🗑 Удалить акт", callback_data="na:del")
@@ -520,14 +502,24 @@ def act_edit_menu_kb():
 #  МОИ АКТЫ
 # =====================================================================
 
+
 def my_acts_categories_kb(counts, object_name):
     builder = InlineKeyboardBuilder()
     ready = counts.get("ready", 0)
     printed = counts.get("printed", 0)
     draft = counts.get("draft", 0)
+    archived = counts.get("archived", 0)
     builder.button(text=f"🆕 Готовые ({ready})", callback_data="myacts:ready")
     builder.button(text=f"🖨 История ({printed})", callback_data="myacts:printed")
     builder.button(text=f"✏️ Недоделанные ({draft})", callback_data="myacts:draft")
+    builder.button(text=f"🗄 Архив ({archived})", callback_data="myacts:archived")
+    builder.button(text="🔎 Поиск", callback_data="myacts:search")
+    builder.button(text="📤 Экспорт в CSV", callback_data="myacts:export")
+    builder.button(text="📊 Экспорт в Excel", callback_data="myacts:excel")
+    builder.button(text="📚 Собрать пакет", callback_data="myacts:package")
+    builder.button(text="🔁 Переименовать файлы", callback_data="myacts:rename")
+    builder.button(text="🗄 Архивировать до даты", callback_data="myacts:archive")
+    builder.button(text="🗓 Архивировать за период", callback_data="myacts:archive_period")
     builder.button(text="❌", callback_data="cancel")
     builder.adjust(1)
     return builder.as_markup()
@@ -546,12 +538,17 @@ def acts_list_kb(acts, prefix):
     return builder.as_markup()
 
 
-def act_card_kb(act):
+def act_card_kb(act, back_status=None):
     builder = InlineKeyboardBuilder()
     act_id = act["id"]
     status = act.get("status") or "ready"
+    back_to = back_status or status
     if status == "draft":
         builder.button(text="▶️ Продолжить", callback_data=f"act_cont:{act_id}")
+        builder.button(text="🗑 Удалить", callback_data=f"act_del:{act_id}")
+    elif status == "archived":
+        builder.button(text="↩ Вернуть из архива", callback_data=f"act_unarchive:{act_id}")
+        builder.button(text="📄 Скачать .docx", callback_data=f"act_dl:{act_id}")
         builder.button(text="🗑 Удалить", callback_data=f"act_del:{act_id}")
     elif status == "ready":
         builder.button(text="🖨 Распечатать", callback_data=f"act_print:{act_id}")
@@ -563,7 +560,7 @@ def act_card_kb(act):
         builder.button(text="✏️ Редактировать", callback_data=f"edit_act:{act_id}")
         builder.button(text="📄 Скачать .docx", callback_data=f"act_dl:{act_id}")
         builder.button(text="🗑 Удалить", callback_data=f"act_del:{act_id}")
-    builder.button(text="🔙 К списку", callback_data=f"act_back:{status}")
+    builder.button(text="🔙 К списку", callback_data=f"act_back:{back_to}")
     builder.button(text="❌", callback_data="cancel")
     builder.adjust(1)
     return builder.as_markup()
@@ -571,9 +568,16 @@ def act_card_kb(act):
 
 def act_delete_confirm_kb(act_id):
     builder = InlineKeyboardBuilder()
-    builder.button(text="✅ Да, удалить",
-                   callback_data=f"act_del_yes:{act_id}")
+    builder.button(text="✅ Да, удалить", callback_data=f"act_del_yes:{act_id}")
     builder.button(text="↩ Отмена", callback_data=f"act_del_no:{act_id}")
+    builder.adjust(1)
+    return builder.as_markup()
+
+
+def archive_confirm_kb():
+    builder = InlineKeyboardBuilder()
+    builder.button(text="✅ Архивировать", callback_data="myacts:archive_yes")
+    builder.button(text="↩ Отмена", callback_data="myacts:menu")
     builder.adjust(1)
     return builder.as_markup()
 
@@ -581,6 +585,7 @@ def act_delete_confirm_kb(act_id):
 # =====================================================================
 #  ПРОЕКТ
 # =====================================================================
+
 
 def project_menu_kb():
     builder = InlineKeyboardBuilder()
@@ -613,8 +618,7 @@ def project_author_works_kb(all_works, selected):
     builder = InlineKeyboardBuilder()
     for w in all_works:
         prefix = "✅ " if w["name"] in selected else "⬜ "
-        builder.button(text=prefix + w["name"][:55],
-                       callback_data=f"paw:toggle:{w['id']}")
+        builder.button(text=prefix + w["name"][:55], callback_data=f"paw:toggle:{w['id']}")
     builder.button(text="✅ Готово", callback_data="paw:done")
     builder.button(text="🔙 К проекту", callback_data="pj:menu")
     builder.button(text="❌", callback_data="cancel")
@@ -625,6 +629,7 @@ def project_author_works_kb(all_works, selected):
 # =====================================================================
 #  SETUP
 # =====================================================================
+
 
 def setup_confirm_scan_kb():
     builder = InlineKeyboardBuilder()
@@ -647,8 +652,7 @@ def setup_works_kb(all_works, selected):
     builder = InlineKeyboardBuilder()
     for w in all_works:
         prefix = "✅ " if w["name"] in selected else "⬜ "
-        builder.button(text=prefix + w["name"][:55],
-                       callback_data=f"setup:aw:{w['id']}")
+        builder.button(text=prefix + w["name"][:55], callback_data=f"setup:aw:{w['id']}")
     builder.button(text="✅ Готово", callback_data="setup:aw_done")
     builder.button(text="❌ Отмена", callback_data="cancel")
     builder.adjust(1)
@@ -658,6 +662,7 @@ def setup_works_kb(all_works, selected):
 # =====================================================================
 #  ЦИКЛЫ
 # =====================================================================
+
 
 def cycles_kb(cycles, owner_tg_id=None):
     builder = InlineKeyboardBuilder()
@@ -675,19 +680,14 @@ def cycles_kb(cycles, owner_tg_id=None):
 
 def cycle_view_kb(cycle_id, items_count, is_owner=False, is_default=False):
     builder = InlineKeyboardBuilder()
-    builder.button(text=f"▶️ Создать {items_count} актов",
-                   callback_data=f"cyc_run:{cycle_id}")
+    builder.button(text=f"▶️ Создать {items_count} актов", callback_data=f"cyc_run:{cycle_id}")
     if is_owner or not is_default:
-        builder.button(text="✏️ Редактировать цикл",
-                       callback_data=f"cyce:menu:{cycle_id}")
+        builder.button(text="✏️ Редактировать цикл", callback_data=f"cyce:menu:{cycle_id}")
     if not is_owner:
-        builder.button(text="📄 Скопировать в свои",
-                       callback_data=f"cyc_copy:{cycle_id}")
+        builder.button(text="📄 Скопировать в свои", callback_data=f"cyc_copy:{cycle_id}")
     if is_owner:
-        builder.button(text="🗑 Удалить цикл",
-                       callback_data=f"cyce:del:{cycle_id}")
-    builder.button(text="🔙 К списку циклов",
-                   callback_data="cyc_back_list")
+        builder.button(text="🗑 Удалить цикл", callback_data=f"cyce:del:{cycle_id}")
+    builder.button(text="🔙 К списку циклов", callback_data="cyc_back_list")
     builder.button(text="❌", callback_data="cancel")
     builder.adjust(1)
     return builder.as_markup()
@@ -695,14 +695,10 @@ def cycle_view_kb(cycle_id, items_count, is_owner=False, is_default=False):
 
 def cycle_edit_menu_kb(cycle_id, is_owner):
     builder = InlineKeyboardBuilder()
-    builder.button(text="➕ Добавить работу",
-                   callback_data=f"cyce:add_item:{cycle_id}")
-    builder.button(text="📝 Переименовать цикл",
-                   callback_data=f"cyce:rename:{cycle_id}")
-    builder.button(text="📋 Изменить описание",
-                   callback_data=f"cyce:desc:{cycle_id}")
-    builder.button(text="🔀 Управление работами",
-                   callback_data=f"cyce:manage:{cycle_id}")
+    builder.button(text="➕ Добавить работу", callback_data=f"cyce:add_item:{cycle_id}")
+    builder.button(text="📝 Переименовать цикл", callback_data=f"cyce:rename:{cycle_id}")
+    builder.button(text="📋 Изменить описание", callback_data=f"cyce:desc:{cycle_id}")
+    builder.button(text="🔀 Управление работами", callback_data=f"cyce:manage:{cycle_id}")
     builder.button(text="🔙 К циклу", callback_data=f"cyc:{cycle_id}")
     builder.button(text="❌", callback_data="cancel")
     builder.adjust(1)
@@ -724,10 +720,8 @@ def cycle_manage_items_kb(items):
 
 def cycle_item_manage_kb(item_id, total_items, order_num):
     builder = InlineKeyboardBuilder()
-    builder.button(text="✏️ Изменить шаблон",
-                   callback_data=f"cyci:tmpl:{item_id}")
-    builder.button(text="✏️ Изменить тип работы",
-                   callback_data=f"cyci:wt:{item_id}")
+    builder.button(text="✏️ Изменить шаблон", callback_data=f"cyci:tmpl:{item_id}")
+    builder.button(text="✏️ Изменить тип работы", callback_data=f"cyci:wt:{item_id}")
     if order_num > 1:
         builder.button(text="⬆️ Вверх", callback_data=f"cyci:up:{item_id}")
     if order_num < total_items:
@@ -742,6 +736,7 @@ def cycle_item_manage_kb(item_id, total_items, order_num):
 
 def step_template_kb():
     from db import STEP_TEMPLATES
+
     builder = InlineKeyboardBuilder()
     for tmpl in STEP_TEMPLATES:
         builder.button(text=tmpl, callback_data=f"tmpl:{tmpl}")
@@ -753,8 +748,7 @@ def step_template_kb():
 
 def cycle_confirm_delete_kb(cycle_id):
     builder = InlineKeyboardBuilder()
-    builder.button(text="🗑 Да, удалить",
-                   callback_data=f"cyce:del_confirm:{cycle_id}")
+    builder.button(text="🗑 Да, удалить", callback_data=f"cyce:del_confirm:{cycle_id}")
     builder.button(text="↩ Отмена", callback_data=f"cyc:{cycle_id}")
     builder.adjust(1)
     return builder.as_markup()
@@ -785,8 +779,7 @@ def cycle_section_kb(sections):
 
 def cycle_dates_kb():
     builder = InlineKeyboardBuilder()
-    builder.button(text="🔙 Изменить общую часть",
-                   callback_data="item_back_common")
+    builder.button(text="🔙 Изменить общую часть", callback_data="item_back_common")
     builder.button(text="❌ Отмена цикла", callback_data="cancel")
     builder.adjust(1)
     return builder.as_markup()
@@ -828,8 +821,7 @@ def cycle_item_preview_kb():
     builder = InlineKeyboardBuilder()
     builder.button(text="✅ Создать акт", callback_data="preview_create")
     builder.button(text="✏️ Править", callback_data="preview_edit")
-    builder.button(text="⏸ Завершить цикл",
-                   callback_data="preview_pause")
+    builder.button(text="⏸ Завершить цикл", callback_data="preview_pause")
     builder.button(text="❌ Отмена", callback_data="cancel")
     builder.adjust(1)
     return builder.as_markup()
@@ -839,22 +831,16 @@ def cycle_item_preview_kb():
 #  РЕДАКТИРОВАНИЕ АКТА
 # =====================================================================
 
+
 def edit_act_menu_kb(act_id):
     builder = InlineKeyboardBuilder()
-    builder.button(text="📝 Наименование работы",
-                   callback_data=f"ea_name:{act_id}")
-    builder.button(text="🔢 Номер акта",
-                   callback_data=f"ea_num:{act_id}")
-    builder.button(text="📅 Даты работ",
-                   callback_data=f"ea_dates:{act_id}")
-    builder.button(text="📄 Листы",
-                   callback_data=f"ea_sheets:{act_id}")
-    builder.button(text="📂 Раздел проекта",
-                   callback_data=f"ea_section:{act_id}")
-    builder.button(text="📦 Материалы и сертификаты",
-                   callback_data=f"ea_materials:{act_id}")
-    builder.button(text="💾 Сохранить и пересобрать акт",
-                   callback_data=f"ea_save:{act_id}")
+    builder.button(text="📝 Наименование работы", callback_data=f"ea_name:{act_id}")
+    builder.button(text="🔢 Номер акта", callback_data=f"ea_num:{act_id}")
+    builder.button(text="📅 Даты работ", callback_data=f"ea_dates:{act_id}")
+    builder.button(text="📄 Листы", callback_data=f"ea_sheets:{act_id}")
+    builder.button(text="📂 Раздел проекта", callback_data=f"ea_section:{act_id}")
+    builder.button(text="📦 Материалы и сертификаты", callback_data=f"ea_materials:{act_id}")
+    builder.button(text="💾 Сохранить и пересобрать акт", callback_data=f"ea_save:{act_id}")
     builder.button(text="❌ Отмена", callback_data="cancel")
     builder.adjust(1)
     return builder.as_markup()
@@ -862,8 +848,7 @@ def edit_act_menu_kb(act_id):
 
 def edit_act_menu_back_kb(act_id):
     builder = InlineKeyboardBuilder()
-    builder.button(text="🔙 К меню акта",
-                   callback_data=f"ea_back:{act_id}")
+    builder.button(text="🔙 К меню акта", callback_data=f"ea_back:{act_id}")
     builder.button(text="❌ Отмена", callback_data="cancel")
     builder.adjust(1)
     return builder.as_markup()

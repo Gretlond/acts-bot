@@ -2,40 +2,61 @@
 """
 Синхронизация проектной документации из папки project/ в БД.
 """
+
 import os
 import re
 
 from config import PROJECT_DIR
 from db import (
-    init_db, get_all_objects,
-    add_position, add_drawing, clear_drawings_for_object,
+    init_db,
+    get_all_objects,
+    add_position,
+    add_drawing,
+    clear_drawings_for_object,
     get_positions_for_object,
 )
 
 SKIP_PREFIXES = ["1. Инжереные сети и ГП", "Сметная документация"]
 
 SECTIONS = [
-    "АОВ", "ЭОМ", "НВКТ", "НВК", "АМВ", "ЭМО",
-    "АР", "КЖ", "КМ", "ТХ", "ВК", "ОВ", "ЭГ",
-    "МВ", "ПЗ", "ГП", "ЭС", "ЭН", "ТК", "ОДД",
+    "АОВ",
+    "ЭОМ",
+    "НВКТ",
+    "НВК",
+    "АМВ",
+    "ЭМО",
+    "АР",
+    "КЖ",
+    "КМ",
+    "ТХ",
+    "ВК",
+    "ОВ",
+    "ЭГ",
+    "МВ",
+    "ПЗ",
+    "ГП",
+    "ЭС",
+    "ЭН",
+    "ТК",
+    "ОДД",
 ]
 
 
 def parse_positions_list(s):
     out = []
     # Нормализация: '29...32' или '29..32' → '29-32'
-    s = s.replace('...', '-').replace('..', '-')
-    for token in re.split(r'[,;]', s):
-        token = token.strip().replace(' ', '')
+    s = s.replace("...", "-").replace("..", "-")
+    for token in re.split(r"[,;]", s):
+        token = token.strip().replace(" ", "")
         if not token:
             continue
-        rng = re.match(r'^(\d+)-(\d+)$', token)
+        rng = re.match(r"^(\d+)-(\d+)$", token)
         if rng:
             a, b = int(rng.group(1)), int(rng.group(2))
             if a <= b and (b - a) < 30:
                 out.extend(str(x) for x in range(a, b + 1))
             continue
-        if re.match(r'^\d+(\.\d+)?$', token):
+        if re.match(r"^\d+(\.\d+)?$", token):
             out.append(token)
     return out
 
@@ -65,17 +86,17 @@ def compress_positions_to_str(positions):
 
 
 def parse_folder(folder_name):
-    name = re.sub(r'^\d+\.\s*', '', folder_name)
-    parts = re.split(r'поз\.?\s*', name, flags=re.IGNORECASE)
+    name = re.sub(r"^\d+\.\s*", "", folder_name)
+    parts = re.split(r"поз\.?\s*", name, flags=re.IGNORECASE)
     if len(parts) == 1:
         return {}
 
     pos_to_name = {}
-    current_name = parts[0].strip().rstrip(',').strip()
+    current_name = parts[0].strip().rstrip(",").strip()
 
     for part in parts[1:]:
         part = part.strip()
-        m = re.match(r'^([\d.,\-\s]+?)(?:,\s*([А-ЯЁа-яёA-Za-z].*))?$', part)
+        m = re.match(r"^([\d.,\-\s]+?)(?:,\s*([А-ЯЁа-яёA-Za-z].*))?$", part)
         if not m:
             continue
         nums = m.group(1).strip()
@@ -84,23 +105,23 @@ def parse_folder(folder_name):
             if pos not in pos_to_name and current_name:
                 pos_to_name[pos] = current_name
         if tail:
-            current_name = tail.strip().rstrip(',').strip()
+            current_name = tail.strip().rstrip(",").strip()
 
     return pos_to_name
 
 
 def clean_folder_name(folder_name):
-    return re.sub(r'^\d+\.\s*', '', folder_name).strip()
+    return re.sub(r"^\d+\.\s*", "", folder_name).strip()
 
 
 def parse_filename(filename):
-    base = re.sub(r'\.pdf$', '', filename, flags=re.IGNORECASE)
-    base_norm = base.replace('_', '-').replace(' ', '-')
+    base = re.sub(r"\.pdf$", "", filename, flags=re.IGNORECASE)
+    base_norm = base.replace("_", "-").replace(" ", "-")
     upper = base_norm.upper()
 
-    m = re.search(r'08-ПР-25-([\d,.\-\s]+?)-([А-ЯЁ]{2,4})', upper)
+    m = re.search(r"08-ПР-25-([\d,.\-\s]+?)-([А-ЯЁ]{2,4})", upper)
     if not m:
-        m = re.search(r'08-ПР25-([\d,.\-\s]+?)-([А-ЯЁ]{2,4})', upper)
+        m = re.search(r"08-ПР25-([\d,.\-\s]+?)-([А-ЯЁ]{2,4})", upper)
     if not m:
         return [], None
 
@@ -157,8 +178,7 @@ def scan_only():
                 result["positions"].append({"number": pos, "name": name})
 
     for folder_name, folder_path in filtered:
-        pdfs = sorted([f for f in os.listdir(folder_path)
-                       if f.lower().endswith(".pdf")])
+        pdfs = sorted([f for f in os.listdir(folder_path) if f.lower().endswith(".pdf")])
         if not pdfs:
             continue
 
@@ -168,18 +188,19 @@ def scan_only():
             virtual_name = clean_folder_name(folder_name)
             if virtual_name and virtual_name not in seen_virtual:
                 seen_virtual.add(virtual_name)
-                result["positions"].append({
-                    "number": "", "name": virtual_name,
-                })
+                result["positions"].append(
+                    {
+                        "number": "",
+                        "name": virtual_name,
+                    }
+                )
 
         for pdf_name in pdfs:
             file_positions, section = parse_filename(pdf_name)
             if not section:
                 continue
 
-            rel_path = os.path.relpath(
-                os.path.join(folder_path, pdf_name), PROJECT_DIR
-            )
+            rel_path = os.path.relpath(os.path.join(folder_path, pdf_name), PROJECT_DIR)
 
             if folder_positions:
                 if file_positions:
@@ -190,47 +211,61 @@ def scan_only():
                     cipher_pos_str = compress_positions_to_str(folder_pos_list)
                     cipher = f"08-ПР/25-{cipher_pos_str}-{section}"
                 for pos in folder_positions.keys():
-                    result["drawings"].append({
-                        "position_number": pos,
-                        "section": section,
-                        "cipher": cipher,
-                        "file_path": rel_path,
-                    })
+                    result["drawings"].append(
+                        {
+                            "position_number": pos,
+                            "section": section,
+                            "cipher": cipher,
+                            "file_path": rel_path,
+                        }
+                    )
             else:
                 if 1 <= len(file_positions) <= 2:
                     cipher_pos_str = compress_positions_to_str(file_positions)
                     cipher = f"08-ПР/25-{cipher_pos_str}-{section}"
                     for pos in file_positions:
-                        result["drawings"].append({
-                            "position_number": pos,
-                            "section": section,
-                            "cipher": cipher,
-                            "file_path": rel_path,
-                        })
+                        result["drawings"].append(
+                            {
+                                "position_number": pos,
+                                "section": section,
+                                "cipher": cipher,
+                                "file_path": rel_path,
+                            }
+                        )
                 elif len(file_positions) >= 3:
                     if virtual_name:
-                        result["drawings"].append({
-                            "position_number": "",
-                            "section": section,
-                            "cipher": f"08-ПР/25-?-{section}",
-                            "file_path": rel_path,
-                        })
+                        result["drawings"].append(
+                            {
+                                "position_number": "",
+                                "section": section,
+                                "cipher": f"08-ПР/25-?-{section}",
+                                "file_path": rel_path,
+                            }
+                        )
                     else:
-                        result["unassigned"].append({
-                            "file": rel_path, "section": section,
-                        })
+                        result["unassigned"].append(
+                            {
+                                "file": rel_path,
+                                "section": section,
+                            }
+                        )
                 else:
                     if virtual_name:
-                        result["drawings"].append({
-                            "position_number": "",
-                            "section": section,
-                            "cipher": f"08-ПР/25-?-{section}",
-                            "file_path": rel_path,
-                        })
+                        result["drawings"].append(
+                            {
+                                "position_number": "",
+                                "section": section,
+                                "cipher": f"08-ПР/25-?-{section}",
+                                "file_path": rel_path,
+                            }
+                        )
                     else:
-                        result["unassigned"].append({
-                            "file": rel_path, "section": section,
-                        })
+                        result["unassigned"].append(
+                            {
+                                "file": rel_path,
+                                "section": section,
+                            }
+                        )
 
     return result
 

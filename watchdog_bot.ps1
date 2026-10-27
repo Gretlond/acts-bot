@@ -8,6 +8,8 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $watchdogPidFile = Join-Path $Root ".watchdog.pid"
 $botPidFile = Join-Path $Root ".bot.pid"
 $disabledFlag = Join-Path $Root ".bot.disabled"
+$heartbeatFile = Join-Path $Root ".bot.heartbeat"
+$heartbeatStaleMinutes = 10
 $watchdogLog = Join-Path $logDir "watchdog.log"
 $botOutLog = Join-Path $logDir "bot.out.log"
 $botErrLog = Join-Path $logDir "bot.err.log"
@@ -25,6 +27,18 @@ function Get-BotProcesses {
 function Rotate-File([string]$Path, [int64]$MaxBytes = 5MB) {
     if ((Test-Path $Path) -and ((Get-Item $Path).Length -gt $MaxBytes)) {
         Move-Item -Path $Path -Destination "$Path.1" -Force
+    }
+}
+
+function Test-HeartbeatStale {
+    if (-not (Test-Path $heartbeatFile)) {
+        return $false
+    }
+    try {
+        $age = (Get-Date) - (Get-Item $heartbeatFile).LastWriteTime
+        return ($age.TotalMinutes -gt $heartbeatStaleMinutes)
+    } catch {
+        return $false
     }
 }
 
@@ -92,6 +106,18 @@ while ($true) {
             Write-WatchdogLog "start failed: $($_.Exception.Message); retry in $delay s"
         }
     } else {
+        if (Test-HeartbeatStale) {
+            Write-WatchdogLog "heartbeat is stale; restarting bot (pid=$($bot.ProcessId))"
+            try {
+                Stop-Process -Id $bot.ProcessId -Force -ErrorAction Stop
+                Start-Sleep -Seconds 2
+            } catch {
+                Write-WatchdogLog "failed to stop stale bot: $($_.Exception.Message)"
+            }
+            $delay = 5
+            Start-Sleep -Seconds $delay
+            continue
+        }
         if ($delay -ne 5) {
             Write-WatchdogLog "bot is healthy again (pid=$($bot.ProcessId))"
             $delay = 5

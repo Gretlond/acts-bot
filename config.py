@@ -5,11 +5,11 @@
 Все пути считаются от каталога проекта (рядом с этим файлом), поэтому бот
 можно запускать из любой рабочей директории.
 """
+
 import os
 from pathlib import Path
 
 from dotenv import load_dotenv
-
 
 ROOT_DIR = Path(__file__).resolve().parent
 load_dotenv(ROOT_DIR / ".env")
@@ -28,7 +28,17 @@ DB_PATH = _path_from_env("DB_PATH", ROOT_DIR / "acts.db")
 PROJECT_DIR = _path_from_env("PROJECT_DIR", ROOT_DIR / "project")
 ACTS_DIR = _path_from_env("ACTS_DIR", ROOT_DIR / "acts")
 DELETED_DIR = ACTS_DIR / "_deleted"
+OLD_DIR = ACTS_DIR / "_old"
+ARCHIVE_DIR = ACTS_DIR / "_archive"
+PACKAGES_DIR = ACTS_DIR / "_packages"
 TEMPLATE_PATH = _path_from_env("TEMPLATE_PATH", ROOT_DIR / "shablonact.docx")
+BACKUPS_DIR = _path_from_env("BACKUPS_DIR", ROOT_DIR / "backups")
+EXPORTS_DIR = _path_from_env("EXPORTS_DIR", ROOT_DIR / "exports")
+CERTIFICATES_DIR = _path_from_env("CERTIFICATES_DIR", ROOT_DIR / "certificates")
+HEARTBEAT_FILE = _path_from_env("HEARTBEAT_FILE", ROOT_DIR / ".bot.heartbeat")
+BACKUP_RETENTION = max(1, int(os.getenv("BACKUP_RETENTION", "30")))
+HEARTBEAT_INTERVAL_SECONDS = max(10, int(os.getenv("HEARTBEAT_INTERVAL_SECONDS", "60")))
+HEARTBEAT_STALE_MINUTES = max(2, int(os.getenv("HEARTBEAT_STALE_MINUTES", "10")))
 
 # ---------- TELEGRAM ----------
 # Проверка токена — при запуске bot.py; утилитам и seed-скриптам токен не нужен.
@@ -54,7 +64,10 @@ ALLOWED_USER_IDS = _ids_from_env("ALLOWED_USER_IDS") | ADMIN_IDS
 # По умолчанию без белого списка доступ закрыт. Для временного открытого
 # режима (только первый запуск) можно явно указать ALLOW_ANY_USER=1.
 ALLOW_ANY_USER = (os.getenv("ALLOW_ANY_USER") or "").strip().lower() in {
-    "1", "true", "yes", "on",
+    "1",
+    "true",
+    "yes",
+    "on",
 }
 ACCESS_OPEN = ALLOW_ANY_USER and not ALLOWED_USER_IDS
 
@@ -88,5 +101,16 @@ def to_stored_path(path: str | os.PathLike) -> str:
 
 
 def ensure_dirs() -> None:
-    for folder in (ACTS_DIR, DELETED_DIR, PROJECT_DIR, DB_PATH.parent):
+    for folder in (
+        ACTS_DIR,
+        DELETED_DIR,
+        OLD_DIR,
+        ARCHIVE_DIR,
+        PACKAGES_DIR,
+        PROJECT_DIR,
+        DB_PATH.parent,
+        BACKUPS_DIR,
+        EXPORTS_DIR,
+        CERTIFICATES_DIR,
+    ):
         folder.mkdir(parents=True, exist_ok=True)

@@ -2,6 +2,7 @@
 """
 Новый акт (NewAct), back, ловушка.
 """
+
 import os
 import json
 import traceback
@@ -13,39 +14,60 @@ from aiogram.types import Message, CallbackQuery, FSInputFile
 
 from db import (
     get_object,
-    get_positions_for_object, get_position,
-    get_all_work_types, add_work_type,
+    get_positions_for_object,
+    get_position,
+    get_all_work_types,
+    add_work_type,
     get_materials_for_object,
-    get_next_act_number, act_number_exists,
+    get_next_act_number,
+    act_number_exists,
     get_sections_for_position,
-    get_drawings_for_position, get_drawings_by_section,
-    save_act, save_draft_act, update_draft_act,
+    get_drawings_for_position,
+    get_drawings_by_section,
+    save_draft_act,
+    update_draft_act,
     delete_act,
     get_acts_by_status,
     is_author_supervision,
+    find_duplicate_act,
+    DuplicateActNumberError,
 )
-from config import ACTS_DIR, PROJECT_DIR, to_stored_path
+from config import ACTS_DIR, PROJECT_DIR
 from docs import check_size, make_input_file
-from generate_act import build_act
-from states import NewAct, CycleRun
+from act_service import (
+    create_act_with_file,
+    validate_act_payload,
+    validation_text,
+)
+from states import NewAct
 from keyboards import (
-    main_menu_kb, work_types_kb,
-    position_group_action_kb, positions_in_group_kb, positions_grouped_kb,
+    main_menu_kb,
+    work_types_kb,
+    position_group_action_kb,
+    positions_in_group_kb,
+    positions_grouped_kb,
     sections_kb,
-    step_with_back_and_delete_kb, step_only_delete_kb, delete_confirm_kb,
-    drawing_view_kb, drawings_list_kb,
-    act_preview_kb, act_edit_menu_kb,
+    step_with_back_and_delete_kb,
+    step_only_delete_kb,
+    delete_confirm_kb,
+    drawing_view_kb,
+    drawings_list_kb,
+    act_preview_kb,
+    act_edit_menu_kb,
 )
 from utils import (
     parse_date,
-    format_materials_with_certs, act_filename, build_template_data,
+    date_range_is_valid,
+    format_materials_with_certs,
+    act_filename,
+    build_template_data,
     materials_to_json,
-    _range_str_from_numbers, _first_position_number,
+    compose_full_work,
+    _range_str_from_numbers,
+    _first_position_number,
     _show_positions_menu,
-    split_materials_by_work_type,
 )
 from materials_view import show_material_categories
-from handlers_certs import _start_cert_flow
 
 router = Router()
 
@@ -53,6 +75,7 @@ router = Router()
 # =====================================================================
 #  НОВЫЙ АКТ
 # =====================================================================
+
 
 @router.message(NewAct.entering_act_number)
 async def msg_new_act_number(message: Message, state: FSMContext):
@@ -62,12 +85,9 @@ async def msg_new_act_number(message: Message, state: FSMContext):
     if not text:
         text = get_next_act_number(data["object_id"])
     if len(text) > 10:
-        await message.answer("⚠️ Слишком длинный номер.",
-                             reply_markup=step_only_delete_kb())
+        await message.answer("⚠️ Слишком длинный номер.", reply_markup=step_only_delete_kb())
         return
-    if act_number_exists(
-        data["object_id"], text, exclude_act_id=data.get("_draft_act_id")
-    ):
+    if act_number_exists(data["object_id"], text, exclude_act_id=data.get("_draft_act_id")):
         await message.answer(
             f"⚠️ Акт №{text} уже существует у этого объекта. "
             "Введите другой номер или удалите старый акт.",
@@ -85,8 +105,7 @@ async def msg_new_act_number(message: Message, state: FSMContext):
         await state.clear()
         return
     await state.set_state(NewAct.choosing_position)
-    await _show_positions_menu(message, state,
-                               prefix=f"📋 Акт №{text}\n\n📍 Выберите позицию:")
+    await _show_positions_menu(message, state, prefix=f"📋 Акт №{text}\n\n📍 Выберите позицию:")
 
 
 @router.callback_query(NewAct.choosing_position, F.data.startswith("pos_grp:"))
@@ -170,7 +189,7 @@ async def cb_new_position_all(call: CallbackQuery, state: FSMContext):
     wt = data.get("work_type_name") or ""
     wn = data.get("work_name") or ""
     if wt or wn:
-        full_work = f"{wt} {wn} позиция №{range_str}".strip()
+        full_work = compose_full_work(wt, wn, range_str)
     else:
         full_work = None
 
@@ -225,11 +244,7 @@ async def _apply_new_position(call: CallbackQuery, state: FSMContext, pos):
     wt = data.get("work_type_name") or ""
     wn = data.get("work_name") or ""
     if wt or wn:
-        if pos_num:
-            full = f"{wt} {wn} позиция №{pos_num}".strip()
-        else:
-            full = f"{wt} {wn}".strip()
-        await state.update_data(full_work=full)
+        await state.update_data(full_work=compose_full_work(wt, wn, pos_num))
 
     if data.get("_edit_mode"):
         await state.update_data(_edit_mode=False)
@@ -257,16 +272,16 @@ async def _apply_new_position(call: CallbackQuery, state: FSMContext, pos):
 async def cb_new_work_type(call: CallbackQuery, state: FSMContext):
     await call.answer()
     await state.set_state(NewAct.entering_work_type_new)
-    await call.message.edit_text("📝 Введите новый тип работы:",
-                                  reply_markup=step_with_back_and_delete_kb())
+    await call.message.edit_text(
+        "📝 Введите новый тип работы:", reply_markup=step_with_back_and_delete_kb()
+    )
 
 
 @router.message(NewAct.entering_work_type_new)
 async def msg_new_work_type(message: Message, state: FSMContext):
     name = (message.text or "").strip()
     if not name or len(name) > 200:
-        await message.answer("⚠️ 1-200 символов.",
-                             reply_markup=step_with_back_and_delete_kb())
+        await message.answer("⚠️ 1-200 символов.", reply_markup=step_with_back_and_delete_kb())
         return
     _, created = add_work_type(name)
     if created:
@@ -299,11 +314,7 @@ async def cb_new_choose_work_type(call: CallbackQuery, state: FSMContext):
     wn = data.get("work_name") or ""
     pos_num = data.get("position_number") or ""
     if wn or pos_num:
-        if pos_num:
-            full = f"{wt['name']} {wn} позиция №{pos_num}".strip()
-        else:
-            full = f"{wt['name']} {wn}".strip()
-        await state.update_data(full_work=full)
+        await state.update_data(full_work=compose_full_work(wt["name"], wn, pos_num))
     edit_mode = data.get("_edit_mode", False)
     if edit_mode:
         await state.update_data(_edit_mode=False)
@@ -326,16 +337,12 @@ async def cb_new_choose_work_type(call: CallbackQuery, state: FSMContext):
 async def msg_new_work_name(message: Message, state: FSMContext):
     name = (message.text or "").strip()
     if not name or len(name) > 400:
-        await message.answer("⚠️ 1-400 символов.",
-                             reply_markup=step_with_back_and_delete_kb())
+        await message.answer("⚠️ 1-400 символов.", reply_markup=step_with_back_and_delete_kb())
         return
     data = await state.get_data()
     wt = data["work_type_name"]
     pos_num = data.get("position_number") or ""
-    if pos_num:
-        full_work = f"{wt} {name} позиция №{pos_num}"
-    else:
-        full_work = f"{wt} {name}"
+    full_work = compose_full_work(wt, name, pos_num)
     await state.update_data(work_name=name, full_work=full_work)
     edit_mode = data.get("_edit_mode", False)
     if edit_mode:
@@ -384,8 +391,10 @@ async def cb_new_choose_section(call: CallbackQuery, state: FSMContext):
     d = drawings[0]
     full_path = PROJECT_DIR / d["file_path"]
     await state.update_data(
-        section=section, cipher=d["cipher"],
-        pdf_path=full_path, drawing_id=d["id"],
+        section=section,
+        cipher=d["cipher"],
+        pdf_path=full_path,
+        drawing_id=d["id"],
     )
     if data.get("_edit_mode"):
         await state.update_data(_edit_mode=False)
@@ -416,8 +425,7 @@ async def cb_drawing_open(call: CallbackQuery, state: FSMContext):
         if ok:
             try:
                 file = make_input_file(full_path)
-                await call.message.answer_document(
-                    file, caption=f"📂 {section} · {cipher}")
+                await call.message.answer_document(file, caption=f"📂 {section} · {cipher}")
             except Exception as e:
                 await call.message.answer(f"⚠️ Ошибка отправки PDF: {e}")
         else:
@@ -483,8 +491,8 @@ async def cb_drawing_pick(call: CallbackQuery, state: FSMContext):
         return
     full_path = PROJECT_DIR / d["file_path"]
     await state.update_data(
-        section=d["section"], cipher=d["cipher"],
-        pdf_path=full_path, drawing_id=d["id"])
+        section=d["section"], cipher=d["cipher"], pdf_path=full_path, drawing_id=d["id"]
+    )
     await call.answer("✅ Выбран")
     try:
         await call.message.delete()
@@ -505,8 +513,7 @@ async def cb_drawing_pick(call: CallbackQuery, state: FSMContext):
 async def msg_new_sheets(message: Message, state: FSMContext):
     sheets = (message.text or "").strip()
     if not sheets or len(sheets) > 60:
-        await message.answer("⚠️ 1-60 символов.",
-                             reply_markup=step_with_back_and_delete_kb())
+        await message.answer("⚠️ 1-60 символов.", reply_markup=step_with_back_and_delete_kb())
         return
     await state.update_data(sheets=sheets)
     data = await state.get_data()
@@ -586,28 +593,42 @@ async def _render_newact_step(message, state: FSMContext, name: str):
         draft_nums = [a["act_number"] for a in drafts if a.get("act_number")]
         text = f"🔢 Введите номер акта (предлагаю {next_num}):"
         if draft_nums:
-            text += ("\n\n⚠️ Есть недоделанные акты: "
-                     + ", ".join(f"№{n}" for n in draft_nums[:10]))
+            text += "\n\n⚠️ Есть недоделанные акты: " + ", ".join(f"№{n}" for n in draft_nums[:10])
         await message.answer(text, reply_markup=step_only_delete_kb())
 
     elif name == "position":
         await state.update_data(
-            position_id=None, position_number=None,
-            search_position_number=None, position_name=None,
-            work_type_name=None, work_name=None, full_work=None,
-            section=None, cipher=None, pdf_path=None, drawing_id=None,
-            sheets=None, selected_materials=[], certs_result={},
+            position_id=None,
+            position_number=None,
+            search_position_number=None,
+            position_name=None,
+            work_type_name=None,
+            work_name=None,
+            full_work=None,
+            section=None,
+            cipher=None,
+            pdf_path=None,
+            drawing_id=None,
+            sheets=None,
+            selected_materials=[],
+            certs_result={},
         )
         await state.set_state(NewAct.choosing_position)
         await _show_positions_menu(
-            message, state,
+            message,
+            state,
             prefix=f"📋 Акт №{data.get('act_number')}\n\n📍 Выберите позицию:",
         )
 
     elif name == "work_type":
         await state.update_data(
-            work_type_name=None, work_name=None, full_work=None,
-            section=None, cipher=None, pdf_path=None, drawing_id=None,
+            work_type_name=None,
+            work_name=None,
+            full_work=None,
+            section=None,
+            cipher=None,
+            pdf_path=None,
+            drawing_id=None,
         )
         await state.set_state(NewAct.choosing_work_type)
         work_types = get_all_work_types()
@@ -621,8 +642,9 @@ async def _render_newact_step(message, state: FSMContext, name: str):
         )
 
     elif name == "work_name":
-        await state.update_data(work_name=None, full_work=None,
-                                section=None, cipher=None, pdf_path=None)
+        await state.update_data(
+            work_name=None, full_work=None, section=None, cipher=None, pdf_path=None
+        )
         await state.set_state(NewAct.entering_work_name)
         pos_num = data.get("position_number") or ""
         suffix = f" «позиция №{pos_num}»" if pos_num else " (без номера)"
@@ -634,11 +656,9 @@ async def _render_newact_step(message, state: FSMContext, name: str):
         )
 
     elif name == "section":
-        await state.update_data(section=None, cipher=None,
-                                pdf_path=None, drawing_id=None)
+        await state.update_data(section=None, cipher=None, pdf_path=None, drawing_id=None)
         await state.set_state(NewAct.choosing_section)
-        search_num = (data.get("search_position_number")
-                      or data.get("position_number") or "")
+        search_num = data.get("search_position_number") or data.get("position_number") or ""
         sections = get_sections_for_position(object_id, search_num)
         if not sections:
             await state.set_state(NewAct.entering_sheets)
@@ -647,8 +667,7 @@ async def _render_newact_step(message, state: FSMContext, name: str):
                 reply_markup=step_with_back_and_delete_kb(),
             )
             return
-        await message.answer("📂 Выберите раздел проекта:",
-                             reply_markup=sections_kb(sections))
+        await message.answer("📂 Выберите раздел проекта:", reply_markup=sections_kb(sections))
 
     elif name == "drawing":
         pdf_path = data.get("pdf_path")
@@ -682,8 +701,9 @@ async def _render_newact_step(message, state: FSMContext, name: str):
         )
 
     elif name == "materials":
-        await state.update_data(selected_materials=[], certs_result={},
-                                start_date=None, end_date=None, act_date=None)
+        await state.update_data(
+            selected_materials=[], certs_result={}, start_date=None, end_date=None, act_date=None
+        )
         await show_material_categories(message, state, "newact")
 
     elif name == "start_date":
@@ -723,8 +743,7 @@ async def cb_na_del_yes(call: CallbackQuery, state: FSMContext):
         await call.message.edit_text("🗑 Акт удалён.")
     except Exception:
         pass
-    await call.message.answer("Выбери действие:",
-                              reply_markup=main_menu_kb())
+    await call.message.answer("Выбери действие:", reply_markup=main_menu_kb())
 
 
 @router.callback_query(F.data == "na:del_no")
@@ -738,12 +757,15 @@ async def cb_na_del_no(call: CallbackQuery, state: FSMContext):
 
 # ---------- Финальный предпросмотр ----------
 
+
 async def _show_final_preview(message, state: FSMContext):
     data = await state.get_data()
     act_number = data.get("act_number", "—")
     position_number = data.get("position_number") or ""
     position_name = data.get("position_name", "—")
-    full_work = data.get("full_work", "—")
+    full_work = data.get("full_work") or compose_full_work(
+        data.get("work_type_name"), data.get("work_name"), position_number
+    )
     cipher = data.get("cipher") or "—"
     section = data.get("section") or "—"
     sheets = data.get("sheets") or "—"
@@ -758,6 +780,32 @@ async def _show_final_preview(message, state: FSMContext):
     certs_result = data.get("certs_result", {})
     mat_str = format_materials_with_certs(selected, certs_result) or "—"
     pos_line = f"позиция №{position_number}" if position_number else "без номера"
+
+    duplicate = None
+    if start_date and end_date:
+        duplicate = find_duplicate_act(
+            data["object_id"],
+            data.get("work_type_name") or "",
+            data.get("work_name") or "",
+            position_number,
+            start_date.get("full") or "",
+            end_date.get("full") or "",
+            exclude_act_id=data.get("_draft_act_id"),
+            work_full=full_work,
+            materials_json=materials_to_json(selected, certs_result),
+        )
+    errors, warnings = validate_act_payload(
+        act_number=act_number,
+        work_type_name=data.get("work_type_name"),
+        work_name=data.get("work_name"),
+        full_work=full_work,
+        start_date=start_date,
+        end_date=end_date,
+        position_number=position_number,
+        selected_materials=selected,
+        certs_result=certs_result,
+        duplicate=duplicate,
+    )
     text = (
         f"📋 АКТ №{act_number}\n\n"
         f"📍 {position_name[:60]} ({pos_line})\n"
@@ -767,8 +815,17 @@ async def _show_final_preview(message, state: FSMContext):
         f"📦 Материалы: {mat_str[:250]}\n"
         f"📅 {dates_str}"
     )
+    check_text = validation_text(errors, warnings)
+    if check_text:
+        text += "\n\n" + check_text
     await state.set_state(NewAct.final_preview)
-    await message.answer(text, reply_markup=act_preview_kb())
+    await message.answer(
+        text,
+        reply_markup=act_preview_kb(
+            confirm_enabled=not errors,
+            duplicate=bool(duplicate),
+        ),
+    )
 
 
 @router.callback_query(NewAct.final_preview, F.data == "na:confirm")
@@ -794,25 +851,28 @@ async def _save_draft(message, state: FSMContext):
     if not object_id:
         await message.answer("⚠️ Не удалось сохранить.")
         return
-    draft_json = json.dumps({
-        "position_id": data.get("position_id"),
-        "position_number": data.get("position_number"),
-        "search_position_number": data.get("search_position_number"),
-        "position_name": data.get("position_name"),
-        "work_type_name": data.get("work_type_name"),
-        "work_name": data.get("work_name"),
-        "full_work": data.get("full_work"),
-        "section": data.get("section"),
-        "cipher": data.get("cipher"),
-        "pdf_path": data.get("pdf_path"),
-        "drawing_id": data.get("drawing_id"),
-        "sheets": data.get("sheets"),
-        "selected_materials": data.get("selected_materials", []),
-        "certs_result": data.get("certs_result", {}),
-        "start_date": data.get("start_date"),
-        "end_date": data.get("end_date"),
-        "act_date": data.get("act_date"),
-    }, ensure_ascii=False)
+    draft_json = json.dumps(
+        {
+            "position_id": data.get("position_id"),
+            "position_number": data.get("position_number"),
+            "search_position_number": data.get("search_position_number"),
+            "position_name": data.get("position_name"),
+            "work_type_name": data.get("work_type_name"),
+            "work_name": data.get("work_name"),
+            "full_work": data.get("full_work"),
+            "section": data.get("section"),
+            "cipher": data.get("cipher"),
+            "pdf_path": data.get("pdf_path"),
+            "drawing_id": data.get("drawing_id"),
+            "sheets": data.get("sheets"),
+            "selected_materials": data.get("selected_materials", []),
+            "certs_result": data.get("certs_result", {}),
+            "start_date": data.get("start_date"),
+            "end_date": data.get("end_date"),
+            "act_date": data.get("act_date"),
+        },
+        ensure_ascii=False,
+    )
     draft_step = data.get("_current_step", "preview")
     if data.get("_draft_act_id"):
         update_draft_act(data["_draft_act_id"], draft_step, draft_json)
@@ -829,8 +889,7 @@ async def _save_draft(message, state: FSMContext):
 @router.callback_query(NewAct.final_preview, F.data == "na:edit")
 async def cb_na_edit(call: CallbackQuery, state: FSMContext):
     await call.answer()
-    await call.message.answer("✏️ Что изменить?",
-                              reply_markup=act_edit_menu_kb())
+    await call.message.answer("✏️ Что изменить?", reply_markup=act_edit_menu_kb())
 
 
 @router.callback_query(NewAct.final_preview, F.data.startswith("nae:"))
@@ -840,21 +899,21 @@ async def cb_nae(call: CallbackQuery, state: FSMContext):
     await state.update_data(_edit_mode=True)
     if field == "number":
         await state.set_state(NewAct.entering_act_number)
-        await call.message.answer("🔢 Введи новый номер:",
-                                  reply_markup=step_with_back_and_delete_kb())
+        await call.message.answer(
+            "🔢 Введи новый номер:", reply_markup=step_with_back_and_delete_kb()
+        )
     elif field == "position":
         await state.set_state(NewAct.choosing_position)
-        await _show_positions_menu(call.message, state,
-                                   prefix="📍 Выбери позицию:")
+        await _show_positions_menu(call.message, state, prefix="📍 Выбери позицию:")
     elif field == "work_type":
         work_types = get_all_work_types()
         await state.set_state(NewAct.choosing_work_type)
-        await call.message.answer("🔨 Выбери тип работы:",
-                                  reply_markup=work_types_kb(work_types))
+        await call.message.answer("🔨 Выбери тип работы:", reply_markup=work_types_kb(work_types))
     elif field == "work_name":
         await state.set_state(NewAct.entering_work_name)
-        await call.message.answer("📝 Введи наименование:",
-                                  reply_markup=step_with_back_and_delete_kb())
+        await call.message.answer(
+            "📝 Введи наименование:", reply_markup=step_with_back_and_delete_kb()
+        )
     elif field == "drawing":
         search_num = data.get("search_position_number") or data.get("position_number") or ""
         sections = get_sections_for_position(data["object_id"], search_num)
@@ -862,19 +921,16 @@ async def cb_nae(call: CallbackQuery, state: FSMContext):
             await call.answer("Разделов нет", show_alert=True)
             return
         await state.set_state(NewAct.choosing_section)
-        await call.message.answer("📂 Выбери раздел:",
-                                  reply_markup=sections_kb(sections))
+        await call.message.answer("📂 Выбери раздел:", reply_markup=sections_kb(sections))
     elif field == "sheets":
         await state.set_state(NewAct.entering_sheets)
-        await call.message.answer("📄 Введи листы:",
-                                  reply_markup=step_with_back_and_delete_kb())
+        await call.message.answer("📄 Введи листы:", reply_markup=step_with_back_and_delete_kb())
     elif field == "materials":
         await call.message.answer("📦 Открываю материалы…")
         await show_material_categories(call.message, state, "newact")
     elif field == "dates":
         await state.set_state(NewAct.entering_start_date)
-        await call.message.answer("📅 Дата начала:",
-                                  reply_markup=step_with_back_and_delete_kb())
+        await call.message.answer("📅 Дата начала:", reply_markup=step_with_back_and_delete_kb())
     await call.answer()
 
 
@@ -883,8 +939,7 @@ async def msg_new_start_date(message: Message, state: FSMContext):
     try:
         d = parse_date(message.text or "")
     except ValueError as e:
-        await message.answer(f"⚠️ {e}",
-                             reply_markup=step_with_back_and_delete_kb())
+        await message.answer(f"⚠️ {e}", reply_markup=step_with_back_and_delete_kb())
         return
     await state.update_data(start_date=d)
     await state.set_state(NewAct.entering_end_date)
@@ -899,8 +954,14 @@ async def msg_new_end_date(message: Message, state: FSMContext):
     try:
         d = parse_date(message.text or "")
     except ValueError as e:
-        await message.answer(f"⚠️ {e}",
-                             reply_markup=step_with_back_and_delete_kb())
+        await message.answer(f"⚠️ {e}", reply_markup=step_with_back_and_delete_kb())
+        return
+    data = await state.get_data()
+    if not date_range_is_valid(data.get("start_date"), d):
+        await message.answer(
+            "⚠️ Дата окончания не может быть раньше даты начала.",
+            reply_markup=step_with_back_and_delete_kb(),
+        )
         return
     await state.update_data(end_date=d, act_date=d)
     await _show_final_preview(message, state)
@@ -913,13 +974,9 @@ async def _generate_and_save_final(message, state: FSMContext, save_as="ready"):
     position_number = data.get("position_number") or ""
     work_type_name = data.get("work_type_name", "")
     work_name = data.get("work_name", "")
-    full_work = data.get("full_work")
-    if not full_work:
-        if position_number:
-            full_work = (f"{work_type_name} {work_name} "
-                         f"позиция №{position_number}")
-        else:
-            full_work = f"{work_type_name} {work_name}"
+    full_work = data.get("full_work") or compose_full_work(
+        work_type_name, work_name, position_number
+    )
     sheets = data.get("sheets", "")
     section = data.get("section") or ""
     cipher = data.get("cipher") or ""
@@ -927,48 +984,78 @@ async def _generate_and_save_final(message, state: FSMContext, save_as="ready"):
     act_date = data.get("act_date") or data.get("end_date")
     start_date = data.get("start_date")
     end_date = data.get("end_date")
-    if not (act_date and start_date and end_date):
-        await message.answer("⚠️ Не хватает дат.")
-        return
     obj = get_object(object_id)
     materials = get_materials_for_object(object_id)
     selected_ids = data.get("selected_materials", [])
     selected = [m for m in materials if m["id"] in selected_ids]
     certs_result = data.get("certs_result", {})
+    errors, _warnings = validate_act_payload(
+        act_number=act_number,
+        work_type_name=work_type_name,
+        work_name=work_name,
+        full_work=full_work,
+        start_date=start_date,
+        end_date=end_date,
+        position_number=position_number,
+        selected_materials=selected,
+        certs_result=certs_result,
+    )
+    if errors or not act_date:
+        await message.answer(
+            "❌ Акт не сохранён:\n• " + "\n• ".join(errors or ["не указана дата акта"])
+        )
+        return
     materials_str = format_materials_with_certs(selected, certs_result)
     materials_json = materials_to_json(selected, certs_result)
     author_sup = is_author_supervision(object_id, work_type_name)
     template_data = build_template_data(
-        obj, full_work, sheets, cipher or "—",
-        start_date, end_date, act_date,
-        materials_str, act_number,
+        obj,
+        full_work,
+        sheets,
+        cipher or "—",
+        start_date,
+        end_date,
+        act_date,
+        materials_str,
+        act_number,
         author_supervision=author_sup,
     )
-    out_path = ACTS_DIR / act_filename(
-        act_number, work_type_name, work_name, position_number)
+    target = ACTS_DIR / act_filename(act_number, work_type_name, work_name, position_number)
     try:
-        out_path = build_act(template_data, out_path=out_path)
+        out_path, _act_id = create_act_with_file(
+            template_data,
+            target,
+            object_id=object_id,
+            position_id=position_id,
+            act_number=act_number,
+            act_date=act_date["full"],
+            start_date=start_date["full"],
+            end_date=end_date["full"],
+            work_full=full_work,
+            sheets=sheets,
+            section=section,
+            cipher=cipher,
+            work_type_name=work_type_name,
+            work_name=work_name,
+            position_number=position_number,
+            materials_data=materials_json,
+            status=save_as,
+        )
+    except DuplicateActNumberError:
+        await message.answer(
+            f"⚠️ Акт №{act_number} уже существует. " "Измените номер или удалите существующий акт."
+        )
+        return
     except Exception as e:
         traceback.print_exc()
         await message.answer(f"❌ Ошибка генерации: {e}")
         return
-    save_act(
-        object_id=object_id, position_id=position_id, act_number=act_number,
-        act_date=act_date["full"], start_date=start_date["full"],
-        end_date=end_date["full"], work_full=full_work,
-        file_path=to_stored_path(out_path),
-        sheets=sheets, section=section, cipher=cipher,
-        work_type_name=work_type_name, work_name=work_name,
-        position_number=position_number, materials_data=materials_json,
-        status=save_as,
-    )
     await message.answer(
         f"✅ Акт №{act_number} готов!\n"
         f"Работа: {full_work[:80]}…\n"
         f"Раздел: {cipher or '—'}\nЛисты: {sheets or '—'}\n"
         f"Материалов: {len(selected)}"
-        + (f"\n🎨 Авторский надзор: {obj.get('author_short')}"
-           if author_sup else "")
+        + (f"\n🎨 Авторский надзор: {obj.get('author_short')}" if author_sup else "")
     )
     try:
         file = FSInputFile(out_path)
@@ -987,6 +1074,7 @@ async def _generate_and_save_final(message, state: FSMContext, save_as="ready"):
 #  BACK
 # =====================================================================
 
+
 @router.callback_query(F.data == "back")
 async def cb_back(call: CallbackQuery, state: FSMContext):
     current = await state.get_state()
@@ -997,11 +1085,11 @@ async def cb_back(call: CallbackQuery, state: FSMContext):
         from db import get_cycles_for_user
         from keyboards import cycles_kb
         from states import CycleRun
+
         tg_id = call.from_user.id
         cycles = get_cycles_for_user(tg_id)
         await state.set_state(CycleRun.choosing_cycle)
-        await call.message.edit_text("📋 Выберите цикл:",
-                                      reply_markup=cycles_kb(cycles, tg_id))
+        await call.message.edit_text("📋 Выберите цикл:", reply_markup=cycles_kb(cycles, tg_id))
         await call.answer()
         return
     await call.answer("Используйте ❌.", show_alert=True)
@@ -1010,6 +1098,7 @@ async def cb_back(call: CallbackQuery, state: FSMContext):
 # =====================================================================
 #  ЛОВУШКА
 # =====================================================================
+
 
 @router.message()
 async def catch_all(message: Message):

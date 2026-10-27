@@ -29,12 +29,16 @@ acts/
 acts.db
 *.docx.bak
 ~$*.docx
+backups/
+exports/
+certificates/
 
 # Локальные логи и PID запущенного бота
 logs/
 .bot.pid
 .watchdog.pid
 .bot.disabled
+.bot.heartbeat
 
 # Исходные PDF проекта (конфиденциальные)
 project/

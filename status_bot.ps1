@@ -1,4 +1,5 @@
 $ErrorActionPreference = "SilentlyContinue"
+try { [Console]::OutputEncoding = [Text.Encoding]::UTF8 } catch { }
 
 $Root = Split-Path -Parent $MyInvocation.MyCommand.Path
 Set-Location $Root
@@ -7,6 +8,7 @@ $watchdogPidFile = Join-Path $Root ".watchdog.pid"
 $botPidFile = Join-Path $Root ".bot.pid"
 $watchdogLog = Join-Path $Root "logs\watchdog.log"
 $botErrLog = Join-Path $Root "logs\bot.err.log"
+$heartbeatFile = Join-Path $Root ".bot.heartbeat"
 $disabledFlag = Join-Path $Root ".bot.disabled"
 
 function Get-WatchdogPid {
@@ -40,6 +42,12 @@ if ($watchdogPid) {
 if ($botProcs) {
     $ids = ($botProcs | Select-Object -ExpandProperty ProcessId) -join ', '
     Write-Host "Bot is running. PID: $ids"
+    if (Test-Path $heartbeatFile) {
+        $age = [Math]::Round(((Get-Date) - (Get-Item $heartbeatFile).LastWriteTime).TotalSeconds)
+        Write-Host "Heartbeat age: $age s"
+    } else {
+        Write-Host "Heartbeat: file not found"
+    }
     if (Test-Path $botErrLog) {
         Write-Host "--- last bot log lines ---"
         Get-Content $botErrLog -Tail 8 -Encoding UTF8

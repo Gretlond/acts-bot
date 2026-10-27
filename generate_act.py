@@ -1,5 +1,6 @@
 # generate_act.py
 """Генерация акта из шаблона .docx."""
+
 import logging
 from datetime import datetime
 from pathlib import Path
@@ -7,7 +8,6 @@ from pathlib import Path
 from docxtpl import DocxTemplate
 
 from config import ACTS_DIR, TEMPLATE_PATH
-
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ def split_with_limits(text, limits):
     text = text.strip()
     total = sum(limits)
     if len(text) > total:
-        text = text[:total - 1].rstrip() + "…"
+        text = text[: total - 1].rstrip() + "…"
 
     lines = []
     remaining = text

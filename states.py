@@ -128,6 +128,11 @@ class MyActs(StatesGroup):
     choosing_category = State()
     choosing_date = State()
     viewing_act = State()
+    searching = State()
+    archiving = State()
+    archiving_start = State()
+    archiving_end = State()
+    confirming_archive = State()
 
 
 class EditAct(StatesGroup):
@@ -150,6 +155,7 @@ class EditAct(StatesGroup):
 
 class MaterialFromAct(StatesGroup):
     """Добавление нового материала прямо из акта."""
+
     entering_name = State()
     entering_qdoc = State()
     entering_work_types = State()
