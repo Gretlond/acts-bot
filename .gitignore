@@ -34,6 +34,7 @@ acts.db
 logs/
 .bot.pid
 .watchdog.pid
+.bot.disabled
 
 # Исходные PDF проекта (конфиденциальные)
 project/

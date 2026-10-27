@@ -5,8 +5,12 @@ Set-Location $Root
 
 $watchdogPidFile = Join-Path $Root ".watchdog.pid"
 $botPidFile = Join-Path $Root ".bot.pid"
+$disabledFlag = Join-Path $Root ".bot.disabled"
 $stoppedWatchdogs = @()
 $stoppedBots = @()
+
+# "Off" must survive a Windows logon: autostart will see this flag and exit.
+Set-Content -Path $disabledFlag -Value (Get-Date -Format "yyyy-MM-dd HH:mm:ss") -Encoding ASCII
 
 # If autostart is installed, stop its task as well so it does not look "Running".
 $taskName = "AAA-Bot-Watchdog"

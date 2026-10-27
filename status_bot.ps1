@@ -7,6 +7,7 @@ $watchdogPidFile = Join-Path $Root ".watchdog.pid"
 $botPidFile = Join-Path $Root ".bot.pid"
 $watchdogLog = Join-Path $Root "logs\watchdog.log"
 $botErrLog = Join-Path $Root "logs\bot.err.log"
+$disabledFlag = Join-Path $Root ".bot.disabled"
 
 function Get-WatchdogPid {
     if (Test-Path $watchdogPidFile) {
@@ -25,6 +26,10 @@ function Get-WatchdogPid {
 $watchdogPid = Get-WatchdogPid
 $botProcs = Get-CimInstance Win32_Process -Filter "Name='python.exe' OR Name='pythonw.exe'" |
     Where-Object { $_.CommandLine -and $_.CommandLine -match 'bot\.py' }
+
+if (Test-Path $disabledFlag) {
+    Write-Host "Start is blocked by .bot.disabled (last command was stop)."
+}
 
 if ($watchdogPid) {
     Write-Host "Watchdog is running. PID: $watchdogPid"

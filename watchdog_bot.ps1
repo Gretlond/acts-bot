@@ -7,6 +7,7 @@ $logDir = Join-Path $Root "logs"
 New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $watchdogPidFile = Join-Path $Root ".watchdog.pid"
 $botPidFile = Join-Path $Root ".bot.pid"
+$disabledFlag = Join-Path $Root ".bot.disabled"
 $watchdogLog = Join-Path $logDir "watchdog.log"
 $botOutLog = Join-Path $logDir "bot.out.log"
 $botErrLog = Join-Path $logDir "bot.err.log"
@@ -25,6 +26,11 @@ function Rotate-File([string]$Path, [int64]$MaxBytes = 5MB) {
     if ((Test-Path $Path) -and ((Get-Item $Path).Length -gt $MaxBytes)) {
         Move-Item -Path $Path -Destination "$Path.1" -Force
     }
+}
+
+if (Test-Path $disabledFlag) {
+    Write-WatchdogLog "bot disabled by .bot.disabled; watchdog exiting"
+    exit 0
 }
 
 # One watchdog only. The mutex is released automatically if the process dies.

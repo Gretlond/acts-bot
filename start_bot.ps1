@@ -8,6 +8,9 @@ New-Item -ItemType Directory -Force -Path $logDir | Out-Null
 $watchdogPidFile = Join-Path $Root ".watchdog.pid"
 $watchdogScript = Join-Path $Root "watchdog_bot.ps1"
 $watchdogLog = Join-Path $logDir "watchdog.log"
+$disabledFlag = Join-Path $Root ".bot.disabled"
+
+Remove-Item $disabledFlag -Force -ErrorAction SilentlyContinue
 
 function Get-WatchdogPid {
     if (Test-Path $watchdogPidFile) {

@@ -5,6 +5,9 @@ $watchdog = Join-Path $Root "watchdog_bot.ps1"
 $taskName = "AAA-Bot-Watchdog"
 $startup = [Environment]::GetFolderPath("Startup")
 $shortcutPath = Join-Path $startup "AAA-Bot-Watchdog.lnk"
+$disabledFlag = Join-Path $Root ".bot.disabled"
+
+Remove-Item $disabledFlag -Force -ErrorAction SilentlyContinue
 
 if (-not (Test-Path $watchdog)) {
     Write-Host "Watchdog script not found: $watchdog"
