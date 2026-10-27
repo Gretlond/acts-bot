@@ -227,7 +227,10 @@ async def _package_ready_acts(call: CallbackQuery, obj_id: int):
     acts = [
         act
         for act in get_acts_for_object(obj_id, limit=100000)
-        if (act.get("status") or "ready") in {"ready", "printed"} and act.get("file_path")
+        if (act.get("status") or "ready") in {"ready", "printed"}
+        and act.get("file_path")
+        and resolve_path(act["file_path"]).exists()
+        and resolve_path(act["file_path"]).suffix.lower() == ".docx"
     ]
     if not acts:
         await call.message.answer("Нет готовых актов для пакета.")

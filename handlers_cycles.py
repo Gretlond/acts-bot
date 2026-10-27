@@ -1142,6 +1142,8 @@ async def _show_item_preview_msg(message, state: FSMContext):
         pos_num,
         start_date.get("full") or "",
         end_date.get("full") or "",
+        work_full=full_line,
+        materials_json=materials_to_json(selected, certs_result),
     )
     errors, warnings = validate_act_payload(
         act_number=act_number,
