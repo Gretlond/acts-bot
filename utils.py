@@ -76,9 +76,52 @@ def format_materials_with_certs(selected, certs_result):
     return ", ".join(parts)
 
 
+WINDOWS_RESERVED_NAMES = {
+    "CON", "PRN", "AUX", "NUL",
+    "COM1", "COM2", "COM3", "COM4", "COM5", "COM6", "COM7", "COM8", "COM9",
+    "LPT1", "LPT2", "LPT3", "LPT4", "LPT5", "LPT6", "LPT7", "LPT8", "LPT9",
+}
+
+
+def _filename_part(value, max_len):
+    """Безопасная часть имени файла: сохраняет кириллицу, пробелы и №."""
+    text = str(value or "").strip()
+    text = re.sub(r'[<>:"/\\|?*\x00-\x1f]', "_", text)
+    text = re.sub(r"\s+", " ", text).strip(" .")
+    if len(text) > max_len:
+        text = text[:max_len].rstrip(" .")
+    if text.upper() in WINDOWS_RESERVED_NAMES:
+        text = f"_{text}"
+    return text
+
+
+def act_filename(act_number, work_type_name="", work_name="", position_number=""):
+    """
+    Читаемое имя файла акта:
+    АКТ№103 (Бетонирование) поз. №33.docx
+
+    В скобках — тип работы; если его нет, берётся наименование работы.
+    Номер позиции может быть диапазоном: 21-28.
+    """
+    number = _filename_part(act_number, 20) or "б_н"
+    work = _filename_part(work_type_name or work_name, 60)
+    position = _filename_part(position_number, 24)
+
+    parts = [f"АКТ№{number}"]
+    if work:
+        parts.append(f"({work})")
+    if position:
+        parts.append(f"поз. №{position}")
+
+    name = " ".join(parts)
+    if len(name) > 150:
+        name = name[:150].rstrip(" .")
+    return f"{name}.docx"
+
+
 def safe_filename(act_number, cipher):
-    safe = "".join(c if c.isalnum() else "_" for c in (cipher or "na"))[:30]
-    return f"act_{act_number}_{safe}.docx"
+    """Старое имя оставлено для совместимости со старыми вызовами."""
+    return act_filename(act_number, cipher)
 
 
 def strip_outer_quotes(text):

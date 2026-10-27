@@ -16,7 +16,7 @@ from db import (
     get_positions_for_object, get_position,
     get_all_work_types, add_work_type,
     get_materials_for_object,
-    get_next_act_number,
+    get_next_act_number, act_number_exists,
     get_sections_for_position,
     get_drawings_for_position, get_drawings_by_section,
     save_act, save_draft_act, update_draft_act,
@@ -38,7 +38,7 @@ from keyboards import (
 )
 from utils import (
     parse_date,
-    format_materials_with_certs, safe_filename, build_template_data,
+    format_materials_with_certs, act_filename, build_template_data,
     materials_to_json,
     _range_str_from_numbers, _first_position_number,
     _show_positions_menu,
@@ -64,6 +64,15 @@ async def msg_new_act_number(message: Message, state: FSMContext):
     if len(text) > 10:
         await message.answer("⚠️ Слишком длинный номер.",
                              reply_markup=step_only_delete_kb())
+        return
+    if act_number_exists(
+        data["object_id"], text, exclude_act_id=data.get("_draft_act_id")
+    ):
+        await message.answer(
+            f"⚠️ Акт №{text} уже существует у этого объекта. "
+            "Введите другой номер или удалите старый акт.",
+            reply_markup=step_only_delete_kb(),
+        )
         return
     await state.update_data(act_number=text)
     if edit_mode:
@@ -935,7 +944,8 @@ async def _generate_and_save_final(message, state: FSMContext, save_as="ready"):
         materials_str, act_number,
         author_supervision=author_sup,
     )
-    out_path = ACTS_DIR / safe_filename(act_number, cipher or "na")
+    out_path = ACTS_DIR / act_filename(
+        act_number, work_type_name, work_name, position_number)
     try:
         out_path = build_act(template_data, out_path=out_path)
     except Exception as e:

@@ -30,7 +30,7 @@ def act_label(act):
     pos = (act.get("position_number") or "").strip()
     if len(wt) > 35:
         wt = wt[:33] + "…"
-    parts = [f"Акт{num}"]
+    parts = [f"Акт №{num}"]
     if wt:
         parts.append(wt)
     if pos:

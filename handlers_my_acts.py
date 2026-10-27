@@ -15,7 +15,7 @@ from db import (
     get_materials_for_object,
     get_sections_for_position,
     get_drawing,
-    get_act, update_act, delete_act, set_act_status,
+    get_act, update_act, delete_act, set_act_status, act_number_exists,
     get_acts_by_status, get_act_status_counts,
     is_author_supervision,
 )
@@ -30,7 +30,7 @@ from keyboards import (
 )
 from utils import (
     parse_date,
-    format_materials_with_certs, safe_filename, build_template_data,
+    format_materials_with_certs, act_filename, build_template_data,
     materials_to_json, materials_from_json, _parse_date_or_none,
 )
 from materials_view import show_material_categories
@@ -396,6 +396,15 @@ async def msg_ea_act_number(message: Message, state: FSMContext):
         await message.answer("⚠️ до 10 символов.",
                              reply_markup=edit_act_menu_back_kb(data["edit_act_id"]))
         return
+    if act_number_exists(
+        data["edit_object_id"], text, exclude_act_id=data["edit_act_id"]
+    ):
+        await message.answer(
+            f"⚠️ Акт №{text} уже существует у этого объекта. "
+            "Введите другой номер.",
+            reply_markup=edit_act_menu_back_kb(data["edit_act_id"]),
+        )
+        return
     await state.update_data(edit_act_number=text)
     await _edit_send_menu(message, state)
 
@@ -550,6 +559,7 @@ async def cb_ea_save(call: CallbackQuery, state: FSMContext):
     await call.answer("Пересобираю акт…")
     data = await state.get_data()
     act_id = data["edit_act_id"]
+    original_act = get_act(act_id) or {}
     object_id = data["edit_object_id"]
     position_id = data.get("edit_position_id")
     position_number = data.get("edit_position_number") or ""
@@ -571,8 +581,7 @@ async def cb_ea_save(call: CallbackQuery, state: FSMContext):
         else:
             full_work = f"{work_type_name} {work_name}"
     else:
-        original = get_act(act_id)
-        full_work = (original or {}).get("work_full") or ""
+        full_work = original_act.get("work_full") or ""
     materials = get_materials_for_object(object_id)
     selected_ids = data.get("edit_selected_materials", [])
     selected = [m for m in materials if m["id"] in selected_ids]
@@ -588,7 +597,12 @@ async def cb_ea_save(call: CallbackQuery, state: FSMContext):
         author_supervision=author_sup,
     )
     old_path = resolve_path(data["edit_file_path"]) if data.get("edit_file_path") else None
-    new_path = ACTS_DIR / safe_filename(act_number, cipher or "na")
+    new_path = ACTS_DIR / act_filename(
+        act_number,
+        work_type_name or original_act.get("work_type_name") or "",
+        work_name or original_act.get("work_name") or "",
+        position_number or original_act.get("position_number") or "",
+    )
     if old_path and old_path.exists() and old_path != new_path:
         try:
             old_path.replace(old_path.with_name(old_path.name + ".bak"))

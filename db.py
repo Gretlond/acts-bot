@@ -807,6 +807,24 @@ def get_next_act_number(object_id):
     return "1"
 
 
+def act_number_exists(object_id, act_number, exclude_act_id=None):
+    """Проверяет, занят ли номер акта в пределах объекта."""
+    conn = get_conn()
+    if exclude_act_id:
+        row = conn.execute(
+            "SELECT 1 FROM acts WHERE object_id = ? AND act_number = ? "
+            "AND id != ? LIMIT 1",
+            (object_id, str(act_number), exclude_act_id)
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT 1 FROM acts WHERE object_id = ? AND act_number = ? LIMIT 1",
+            (object_id, str(act_number))
+        ).fetchone()
+    conn.close()
+    return row is not None
+
+
 def get_recent_acts(object_id=None, limit=10):
     conn = get_conn()
     if object_id:

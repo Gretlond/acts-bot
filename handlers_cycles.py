@@ -44,7 +44,7 @@ from utils import (
     parse_dates_range,
     format_materials_with_certs,
     build_template_data, resolve_section_hint,
-    materials_to_json, safe_filename,
+    materials_to_json, act_filename,
     _range_str_from_numbers, _first_position_number,
     _show_positions_menu,
 )
@@ -1167,7 +1167,8 @@ async def cb_preview_create(call: CallbackQuery, state: FSMContext):
             materials_str, act_number,
             author_supervision=author_sup,
         )
-        out_path = ACTS_DIR / safe_filename(act_number, cipher or "na")
+        out_path = ACTS_DIR / act_filename(
+            act_number, item["work_type"], work_name, pos_num)
         try:
             out_path = build_act(template_data, out_path=out_path)
         except Exception as e:
